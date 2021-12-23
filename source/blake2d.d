@@ -4,6 +4,8 @@
 /// Authors: $(LINK2 github.com/dd86k, dd86k)
 module blake2d;
 
+public enum BLAKE2D_VERSION_STRING = "0.1.0";
+
 private import std.digest;
 private import core.bitop : ror, bswap;
 
