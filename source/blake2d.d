@@ -87,8 +87,8 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         private enum R2 = 24;
         private enum R3 = 16;
         private enum R4 = 63;
-        alias IV = B2B_IV;
-        alias inner_t = ulong;
+        private alias IV = B2B_IV;
+        private alias inner_t = ulong;
     } else static if (var == BLAKE2Variant.s) { // BLAKE2s
         // 8 to 256 bits
         static assert(digestSize >= 8 && digestSize <= 256,
@@ -101,8 +101,8 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         private enum R2 = 12;
         private enum R3 = 8;
         private enum R4 = 7;
-        alias IV = B2S_IV;
-        alias inner_t = uint;
+        private alias IV = B2S_IV;
+        private alias inner_t = uint;
     } else static assert(0, "Invalid BLAKE2 variant.");
     
     enum blockSize = digestSize;    /// Digest size in bits
@@ -189,7 +189,7 @@ private:
     else
         enum KEYLEN = 0;*/
     
-    public ubyte[32] key;
+    //public ubyte[32] key;
     
     enum digestSizeBytes = digestSize / 8;
     //           3 2 1 0
