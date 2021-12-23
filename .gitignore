@@ -1,0 +1,16 @@
+.dub
+dub.selections.json
+docs.json
+__dummy.html
+docs/
+/blake2-d
+blake2-d.so
+blake2-d.dylib
+blake2-d.dll
+blake2-d.a
+blake2-d.lib
+blake2-d-test-*
+*.exe
+*.o
+*.obj
+*.lst
