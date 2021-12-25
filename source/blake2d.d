@@ -119,8 +119,6 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
     /// Params: input = Input data to digest
     void put(scope const(ubyte)[] input...) @trusted
     {
-        version (BLAKE2Trace) writefln("put() len=%u", input.length);
-        
         // Process wordwise if properly aligned.
         if ((c | cast(size_t) input.ptr) % size_t.alignof == 0)
         {
