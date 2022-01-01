@@ -4,7 +4,7 @@
 /// Authors: $(LINK2 github.com/dd86k, dd86k)
 module blake2d;
 
-public enum BLAKE2D_VERSION_STRING = "0.1.0";
+public enum BLAKE2D_VERSION_STRING = "0.2.0";
 
 private import std.digest;
 private import core.bitop : ror, bswap;
@@ -65,10 +65,7 @@ enum BLAKE2Variant {
 //   key = HMAC key. This is a temporary hack to allow HMAC usage.
 struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
 {
-    @safe:
-    @nogc:
-    nothrow:
-    pure:
+    @safe: @nogc: nothrow: pure:
     
     static assert(digestSize > 0,
         "Digest size must be non-zero.");
@@ -80,8 +77,9 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         static assert(digestSize >= 8 && digestSize <= 512,
             "BLAKE2b digest size must be between 8 and 512 bits.");
         
+        private enum MAXKEYSIZE = 32; // In bytes
         private enum MAXED = digestSize == 512;
-        private enum BSIZE = 128;   /// bb
+        private enum BSIZE = 128;   /// Buffer size, "bb" variable
         private enum ROUNDS = 12;
         private enum R1 = 32;
         private enum R2 = 24;
@@ -94,8 +92,9 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         static assert(digestSize >= 8 && digestSize <= 256,
             "BLAKE2s digest size must be between 8 and 256 bits.");
         
+        private enum MAXKEYSIZE = 32; // In bytes
         private enum MAXED = digestSize == 256;
-        private enum BSIZE = 64;    /// bb
+        private enum BSIZE = 64;    /// Buffer size, "bb" variable
         private enum ROUNDS = 10;
         private enum R1 = 16;
         private enum R2 = 12;
@@ -111,6 +110,20 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
     void start()
     {
         this = typeof(this).init;
+    }
+    
+    /// Initiates a key with digest.
+    /// This is meant to be used after the digest initiation.
+    /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
+    /// BLAKE2s. If the limit is reached, it fails silenty by truncating
+    /// key data.
+    /// Params: input = Key.
+    void key(scope const(ubyte)[] input)
+    {
+        enum MASK  = BSIZE - 1;
+        h[0] ^= ((input.length & MASK) << 8);
+        put(input.length > BSIZE ? input[0..BSIZE] : input);
+        c = BSIZE;
     }
     
     /// Feed the algorithm with data.
@@ -167,7 +180,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         // Clear out possible sensitive data
         t[0] = t[1] = c = 0; // clear size information
         mz[] = 0; // clear input message buffer
-        // Only clear remaining of state if digest not at maximum.
+        // Only clear remaining of state if digest isn't fulled used.
         // e.g., BLAKE2b-512 has a digest size of 64 bytes
         //       ulong[8] (8*8) is 64 bytes of state
         //       So is BLAKE2x-256 is used, a digest of 32 bytes
@@ -179,22 +192,13 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
     }
     
 private:
-
-    /*static if (key)
-    {
-        enum KEYLEN = key.length;
-    }
-    else
-        enum KEYLEN = 0;*/
-    
-    //public ubyte[32] key;
     
     enum digestSizeBytes = digestSize / 8;
     //           3 2 1 0
     // p[0] = 0x0101kknn
     // kk - Key size. Set to zero since HMAC is done elsewhere.
     // nn - Digest size in bytes.
-    enum p0 = 0x0101_0000 ^ (0 << 8) ^ digestSizeBytes;
+    enum p0 = 0x0101_0000 ^ digestSizeBytes;
     enum msz = 16 * inner_t.sizeof; /// message size in bytes
     enum hsz = 8 * inner_t.sizeof;  /// state size in bytes
     
@@ -249,7 +253,7 @@ private:
         v[14] = last ? ~IV[6] : IV[6];
         v[15] = IV[7];
         
-        // See i=0 v[16]
+        // Assert i=0 v[16]
         
         for (size_t round; round < ROUNDS; ++round)
         {
@@ -263,7 +267,7 @@ private:
             G(v, 2, 7,  8, 13, m[SIGMA[round][12]], m[SIGMA[round][13]]);
             G(v, 3, 4,  9, 14, m[SIGMA[round][14]], m[SIGMA[round][15]]);
             
-            // See i=1..i=10/12 v[16]
+            // Assert i=1..i=10/12 v[16]
         }
         
         h[0] ^= v[0] ^ v[8];
@@ -275,7 +279,7 @@ private:
         h[6] ^= v[6] ^ v[14];
         h[7] ^= v[7] ^ v[15];
         
-        // See h[8]
+        // Assert h[8]
     }
     
     static void G(ref inner_t[16] v, uint a, uint b, uint c, uint d, inner_t x, inner_t y)
@@ -315,16 +319,20 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     assert(isDigest!BLAKE2s256);
 }
 
+/// Of course they have a blockSize!
+@safe unittest
+{
+    assert(hasBlockSize!BLAKE2b512);
+    assert(hasBlockSize!BLAKE2s256);
+}
+
 /// Testing "Of" wrappers against digest wrappers.
 @safe unittest
 {
     enum TEXT = "abc";
     
-    ubyte[64] b2b = blake2b_Of(TEXT);
-    assert(b2b == digest!BLAKE2b512(TEXT));
-    
-    ubyte[32] b2s = blake2s_Of(TEXT);
-    assert(b2s == digest!BLAKE2s256(TEXT));
+    assert(blake2b_Of(TEXT) == digest!BLAKE2b512(TEXT));
+    assert(blake2s_Of(TEXT) == digest!BLAKE2s256(TEXT));
 }
 
 /// Testing template API
@@ -388,13 +396,13 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     
     ubyte[] s = ['a', 'b', 'c'];
     
-    BLAKE2b512Digest b2b = new BLAKE2b512Digest();
+    Digest b2b = new BLAKE2b512Digest();
     b2b.put(s);
     assert(b2b.finish() == cast(ubyte[]) hexString!(
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"));
     
-    BLAKE2s256Digest b2s = new BLAKE2s256Digest();
+    Digest b2s = new BLAKE2s256Digest();
     b2s.put(s);
     assert(b2s.finish() == cast(ubyte[]) hexString!(
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
@@ -425,28 +433,37 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
-/// Testing with HMAC
-/*@system unittest
+/// Keying digests
+@system unittest
 {
+    // NOTE: BLAKE2 is a keyed hash and therefore not compatible with
+    //       the hmac/HMAC templates, or OpenSSL does it differently.
+    
     import std.ascii : LetterCase;
-    import std.digest.hmac : hmac;
     import std.string : representation;
+    import std.conv : hexString;
     
-    auto secret = "secret".representation;
+    auto secret2b = hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"~
+        "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
+        .representation;
+    auto secret2s = hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+        .representation;
+    auto data = hexString!("000102").representation;
     
-    // Temporary hack
-    //alias HMACBLAKE2b512 = BLAKE2!(BLAKE2Variant.b, 512, "secret".representation);
-    //alias HMACBLAKE2s256 = BLAKE2!(BLAKE2Variant.s, 256, "secret".representation);
-
-    assert("The quick brown fox jumps over the lazy dog"
-        .representation
-        .hmac!BLAKE2b512(secret)
-        .toHexString!(LetterCase.lower) ==
-        "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
-        "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0");
-    assert("The quick brown fox jumps over the lazy dog"
-        .representation
-        .hmac!BLAKE2s256(secret)
-        .toHexString!(LetterCase.lower) ==
-        "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1");
-}*/
+    BLAKE2b512 b2b;
+    b2b.key(secret2b);
+    b2b.put(data);
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+        "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
+        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1"
+        , "BLAKE2b+secret failed");
+    
+    BLAKE2s256 b2s;
+    b2s.key(secret2s);
+    b2s.put(data);
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b"
+        , "BLAKE2s+secret failed");
+}
