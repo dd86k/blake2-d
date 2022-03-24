@@ -80,7 +80,8 @@ Currently, the only way to supply a key is with the `key` function:
 import std.string : representation;
 import std.conv : hexString;
 
-// Key can be between 1 to 32 bytes.
+// Key can be between 1 to 32 bytes for BLAKE2s256 and
+// 1 to 64 bytes for BLAKE2b512.
 auto secret = hexString!(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
     .representation;
