@@ -1,5 +1,5 @@
 name "blake2-d"
 description "Pure D implementation of BLAKE2"
 authors "dd86k <dd@dax.moe>"
-copyright "Copyright © 2021, dd86k"
+copyright "Copyright © 2022, dd86k"
 license "BSL-1.0"
