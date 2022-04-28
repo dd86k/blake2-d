@@ -1,9 +1,12 @@
-/// Computes BLAKE2b and BLAKE2s hashes of arbitary data.
+/// Computes BLAKE2 hashes of arbitrary data.
 /// Reference: IETF RFC 7693
 /// License: $(LINK2 www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
 /// Authors: $(LINK2 github.com/dd86k, dd86k)
 module blake2d;
 
+// NOTE: The Phobos Digest API have no support for keyed hashes.
+
+/// Version string for runtime diagnostics.
 public enum BLAKE2D_VERSION_STRING = "0.2.0";
 
 private import std.digest;
@@ -26,16 +29,14 @@ private immutable ubyte[16][12] SIGMA = [
     [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
 ];
 
-private
-immutable ulong[8] B2B_IV = [
+private immutable ulong[8] B2B_IV = [
     0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
     0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
     0x510e527fade682d1, 0x9b05688c2b3e6c1f,
     0x1f83d9abfb41bd6b, 0x5be0cd19137e2179
 ];
 
-private
-immutable uint[8] B2S_IV = [
+private immutable uint[8] B2S_IV = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
@@ -174,7 +175,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
         
         // 0-pad message buffer
         m8[c..$] = 0;
-        last = 1;
+        last = true;
         compress();
         
         // Clear out possible sensitive data
@@ -229,7 +230,7 @@ private:
     }
     inner_t[2] t;  /// Total count of input size
     size_t c;      /// Counter, pointer for buffer
-    uint last;     /// If set, this is the last block to compress.
+    bool last;     /// If set, this is the last block to compress.
     
     void compress()
     {
