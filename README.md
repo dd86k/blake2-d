@@ -56,7 +56,9 @@ The OOP API uses a class (object) implementation and is a good choice if
 your application plans to support one or more digest algorithms.
 
 ```d
-// NOTE: hexString is from std.conv
+import std.string : representation;
+import std.conv : hexString;
+
 Digest dgst = new BLAKE2b512Digest();
 dgst.put("abc");
 assert(dgst.finish() == cast(ubyte[]) hexString!(
@@ -80,15 +82,20 @@ Currently, the only way to supply a key is with the `key` function:
 import std.string : representation;
 import std.conv : hexString;
 
-// Key can be between 1 to 32 bytes for BLAKE2s256 and
-// 1 to 64 bytes for BLAKE2b512.
+// Key can be between 1 to 32 bytes for BLAKE2s256
+// and 1 to 64 bytes for BLAKE2b512.
 auto secret = hexString!(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
     .representation;
+// Vector from official suite.
 auto data = hexString!("000102").representation;
 
 BLAKE2s256 b2s;
 b2s.key(secret);
+b2s.put(data);
+
+assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b");
 ```
 
 # License

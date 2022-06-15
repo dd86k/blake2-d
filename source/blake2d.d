@@ -1,19 +1,19 @@
-/// Computes BLAKE2 hashes of arbitrary data.
-/// Reference: IETF RFC 7693
+/// Computes BLAKE2 hashes of arbitrary data using a native implementation.
+/// Standards: IETF RFC 7693
 /// License: $(LINK2 www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
 /// Authors: $(LINK2 github.com/dd86k, dd86k)
 module blake2d;
 
 // NOTE: The Phobos Digest API have no support for keyed hashes.
 
-/// Version string for runtime diagnostics.
+/// Version string of blake2-d that can be used for printing purposes.
 public enum BLAKE2D_VERSION_STRING = "0.2.0";
 
 private import std.digest;
 private import core.bitop : ror, bswap;
 
-// "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
-// SIGMA[10..11] = SIGMA[0..1]."
+/// "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
+/// SIGMA[10..11] = SIGMA[0..1]."
 private immutable ubyte[16][12] SIGMA = [
     [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, ],
     [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
@@ -29,6 +29,7 @@ private immutable ubyte[16][12] SIGMA = [
     [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
 ];
 
+/// BLAKE2b IVs
 private immutable ulong[8] B2B_IV = [
     0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
     0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
@@ -36,6 +37,7 @@ private immutable ulong[8] B2B_IV = [
     0x1f83d9abfb41bd6b, 0x5be0cd19137e2179
 ];
 
+/// BLAKE2s IVs
 private immutable uint[8] B2S_IV = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -51,18 +53,20 @@ enum BLAKE2Variant {
 /// BLAKE2 structure template.
 ///
 /// It is recommended to use the BLAKE2p512 and BLAKE2s256 aliases.
-/// However, if you wish to use a custom digest size, this is the structure
-/// to use.
 ///
-/// Example definitions for BLAKE2s-160:
+/// Examples:
 /// ---
+/// // Defines BLAKE2s-160 with Template API, OOP API, and helper function.
 /// alias BLAKE2s160 = BLAKE2!(BLAKE2Variant.s, 160);
 /// auto blake2s160_Of(T...)(T data) { return digest!(BLAKE2s160, T)(data); }
 /// public alias BLAKE2s160Digest = WrapperDigest!BLAKE2s160;
 /// ---
+///
 /// Params:
 ///   var = BLAKE2 hash variation.
 ///   digestSize = Digest size in bits.
+///
+/// Throws: No exceptions are thrown.
 //   key = HMAC key. This is a temporary hack to allow HMAC usage.
 struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
 {
@@ -437,8 +441,8 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
 /// Keying digests
 @system unittest
 {
-    // NOTE: BLAKE2 is a keyed hash and therefore not compatible with
-    //       the hmac/HMAC templates, or OpenSSL does it differently.
+    // NOTE: This implementation is not yet compatible with the hmac/HMAC
+    //       templates at the moment.
     
     import std.ascii : LetterCase;
     import std.string : representation;
