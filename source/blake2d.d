@@ -1,7 +1,7 @@
 /// Computes BLAKE2 hashes of arbitrary data using a native implementation.
 /// Standards: IETF RFC 7693
-/// License: $(LINK2 www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
-/// Authors: $(LINK2 github.com/dd86k, dd86k)
+/// License: $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
+/// Authors: $(LINK2 https://github.com/dd86k, dd86k)
 module blake2d;
 
 // NOTE: The Phobos Digest API have no support for keyed hashes.
@@ -262,7 +262,7 @@ private:
         
         for (size_t round; round < ROUNDS; ++round)
         {
-            //   a  b   c   d  x                      y
+            //   a  b   c   d  x                    y
             G(v, 0, 4,  8, 12, m[SIGMA[round][ 0]], m[SIGMA[round][ 1]]);
             G(v, 1, 5,  9, 13, m[SIGMA[round][ 2]], m[SIGMA[round][ 3]]);
             G(v, 2, 6, 10, 14, m[SIGMA[round][ 4]], m[SIGMA[round][ 5]]);
