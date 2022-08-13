@@ -6,12 +6,13 @@ algorithms and is compatible with the Phobos Digest API (std.digest).
 BLAKE2 was introduced in 2015 as IETF RFC 7693. You can visit
 [the website](https://www.blake2.net/) for more information.
 
-This module:
+Features (still WIP!):
 
-- [x] Supports BLAKE2b-512 and BLAKE2s-256.
-- [x] Supports custom digest sizes.
-- [x] Supports keying.
-- [ ] Supports BLAKE2bp and BLAKE2sp.
+- [x] BLAKE2b-512 and BLAKE2s-256.
+- [x] Custom digest sizes.
+- [x] Supports keying dynamically.
+- [ ] Supports keying at compile-time.
+- [ ] BLAKE2bp and BLAKE2sp variants.
 
 NOTE: May be incompatible with HMAC.
 
@@ -64,7 +65,7 @@ dgst.put("abc");
 assert(dgst.finish() == cast(ubyte[]) hexString!(
     "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
     "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"));
-dgst.start(); // reset
+dgst.reset();
 dgst.put("abcdef");
 assert(dgst.finish() == cast(ubyte[]) hexString!(
     "dde410524e3569b303e494aa82a3afb3e426f9df24c1398e9ff87aafbc2f5b7b"~
