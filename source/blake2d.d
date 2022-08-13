@@ -10,10 +10,11 @@ module blake2d;
 public enum BLAKE2D_VERSION_STRING = "0.2.0";
 
 private import std.digest;
-private import core.bitop : ror, bswap;
+private import core.bitop : ror;
 
-/// "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
-/// SIGMA[10..11] = SIGMA[0..1]."
+// "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
+// SIGMA[10..11] = SIGMA[0..1]."
+/// Sigma scheduling.
 private immutable ubyte[16][12] SIGMA = [
     [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, ],
     [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
@@ -43,16 +44,18 @@ private immutable uint[8] B2S_IV = [
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
 
-/// Used with the BLAKE2 structure template to make the BLAKE2s and BLAKE2p
+/// Used with the BLAKE2 structure template to make the BLAKE2s and BLAKE2b
 /// aliases.
 enum BLAKE2Variant {
-    b,  /// BLAKE2b (default)
+    b,  /// BLAKE2b
     s,  /// BLAKE2s
 }
 
 /// BLAKE2 structure template.
 ///
-/// It is recommended to use the BLAKE2p512 and BLAKE2s256 aliases.
+/// It is recommended to use the BLAKE2b512 and BLAKE2s256 template aliases.
+///
+/// BLAKE2X is not supported.
 ///
 /// Examples:
 /// ---
@@ -67,15 +70,12 @@ enum BLAKE2Variant {
 ///   digestSize = Digest size in bits.
 ///
 /// Throws: No exceptions are thrown.
-//   key = HMAC key. This is a temporary hack to allow HMAC usage.
-struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
+struct BLAKE2(BLAKE2Variant var, uint digestSize)
 {
     @safe: @nogc: nothrow: pure:
     
-    static assert(digestSize > 0,
-        "Digest size must be non-zero.");
-    static assert(digestSize % 8 == 0,
-        "Digest size must be dividable by 8.");
+    static assert(digestSize > 0, "Digest size must higher than zero.");
+    static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
     
     static if (var == BLAKE2Variant.b) { // BLAKE2b
         // 8 to 512 bits
@@ -111,7 +111,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
     
     enum blockSize = digestSize;    /// Digest size in bits
     
-    /// Initiate or reset the state of the structure.
+    /// Initiate or reset the state of the instance.
     void start()
     {
         this = typeof(this).init;
@@ -146,7 +146,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
                 {
                     t[0] += c;
                     if (t[0] < c) ++t[1]; // Overflow
-                    compress();
+                    compress;
                     c = 0;
                 }
                 mz.ptr[c / size_t.sizeof] = word;
@@ -162,7 +162,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
             {
                 t[0] += c;
                 if (t[0] < c) ++t[1]; // Overflow
-                compress();
+                compress;
                 c = 0;
             }
             m8[c++] = i;
@@ -173,14 +173,14 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize/*, const(ubyte)[] key = null*/)
     /// Returns: Raw digest data.
     ubyte[digestSizeBytes] finish()
     {
-        // final counter update
+        // Final counter update
         t[0] += c;
         if (t[0] < c) ++t[1];
         
-        // 0-pad message buffer
+        // Zero-pad message buffer
         m8[c..$] = 0;
-        last = true;
-        compress();
+        l = ~IV[6];
+        compress;
         
         // Clear out possible sensitive data
         t[0] = t[1] = c = 0; // clear size information
@@ -212,65 +212,57 @@ private:
     
     union // input message buffer
     {
-        size_t[BSIZE / size_t.sizeof] mz = void;
-        inner_t[16] m;   /// Message
-        ubyte[16 * inner_t.sizeof] m8; /// Message in byte-size
+        size_t[BSIZE / size_t.sizeof] mz = void; /// Message (m) as size_t
+        inner_t[16] m;   /// Message (m)
+        ubyte[16 * inner_t.sizeof] m8; /// Message (m) as ubyte
     }
     union // state
     {
-        struct // .init hack since start() can't cover this
-        {
-            inner_t h0 = IV[0] ^ p0;
-            inner_t h1 = IV[1];
-            inner_t h2 = IV[2];
-            inner_t h3 = IV[3];
-            inner_t h4 = IV[4];
-            inner_t h5 = IV[5];
-            inner_t h6 = IV[6];
-            inner_t h7 = IV[7];
-        }
-        inner_t[8] h;   /// State
+        inner_t[8] h = (IV[0] ^ p0) ~ IV[1..$];   /// State
         ubyte[8 * inner_t.sizeof] h8;   /// State in byte-size
     }
-    inner_t[2] t;  /// Total count of input size
-    size_t c;      /// Counter, pointer for buffer
-    bool last;     /// If set, this is the last block to compress.
+    inner_t[2] t;      /// Total count of input size (t).
+    size_t c;          /// Counter, index for input message.
+    inner_t l = IV[6]; /// On last block, this turns from IV6 to ~IV6.
     
-    void compress()
+    void compress() @trusted
     {
         //TODO: bswap m on BigEndian platforms?
         
-        inner_t[16] v = void;
-        v[0]  = h[0];
-        v[1]  = h[1];
-        v[2]  = h[2];
-        v[3]  = h[3];
-        v[4]  = h[4];
-        v[5]  = h[5];
-        v[6]  = h[6];
-        v[7]  = h[7];
-        v[8]  = IV[0];
-        v[9]  = IV[1];
-        v[10] = IV[2];
-        v[11] = IV[3];
-        v[12] = t[0] ^ IV[4];
-        v[13] = t[1] ^ IV[5];
-        v[14] = last ? ~IV[6] : IV[6];
-        v[15] = IV[7];
+        inner_t[16] v = [
+            h[0],
+            h[1],
+            h[2],
+            h[3],
+            h[4],
+            h[5],
+            h[6],
+            h[7],
+            IV[0],
+            IV[1],
+            IV[2],
+            IV[3],
+            t[0] ^ IV[4],
+            t[1] ^ IV[5],
+            l, // Avoids a branch
+            IV[7],
+        ];
         
         // Assert i=0 v[16]
         
         for (size_t round; round < ROUNDS; ++round)
         {
-            //   a  b   c   d  x                    y
-            G(v, 0, 4,  8, 12, m[SIGMA[round][ 0]], m[SIGMA[round][ 1]]);
-            G(v, 1, 5,  9, 13, m[SIGMA[round][ 2]], m[SIGMA[round][ 3]]);
-            G(v, 2, 6, 10, 14, m[SIGMA[round][ 4]], m[SIGMA[round][ 5]]);
-            G(v, 3, 7, 11, 15, m[SIGMA[round][ 6]], m[SIGMA[round][ 7]]);
-            G(v, 0, 5, 10, 15, m[SIGMA[round][ 8]], m[SIGMA[round][ 9]]);
-            G(v, 1, 6, 11, 12, m[SIGMA[round][10]], m[SIGMA[round][11]]);
-            G(v, 2, 7,  8, 13, m[SIGMA[round][12]], m[SIGMA[round][13]]);
-            G(v, 3, 4,  9, 14, m[SIGMA[round][14]], m[SIGMA[round][15]]);
+            immutable(ubyte) *sigma = SIGMA[round].ptr;
+            
+            //   a  b   c   d  x             y
+            G(v, 0, 4,  8, 12, m[sigma[ 0]], m[sigma[ 1]]);
+            G(v, 1, 5,  9, 13, m[sigma[ 2]], m[sigma[ 3]]);
+            G(v, 2, 6, 10, 14, m[sigma[ 4]], m[sigma[ 5]]);
+            G(v, 3, 7, 11, 15, m[sigma[ 6]], m[sigma[ 7]]);
+            G(v, 0, 5, 10, 15, m[sigma[ 8]], m[sigma[ 9]]);
+            G(v, 1, 6, 11, 12, m[sigma[10]], m[sigma[11]]);
+            G(v, 2, 7,  8, 13, m[sigma[12]], m[sigma[13]]);
+            G(v, 3, 4,  9, 14, m[sigma[14]], m[sigma[15]]);
             
             // Assert i=1..i=10/12 v[16]
         }
@@ -300,38 +292,38 @@ private:
     }
 }
 
-/// Alias for BLAKE2b-512
+/// Template API alias for BLAKE2b-512.
 public alias BLAKE2b512 = BLAKE2!(BLAKE2Variant.b, 512);
-/// Alias for BLAKE2s-256
+/// Template API alias for BLAKE2s-256.
 public alias BLAKE2s256 = BLAKE2!(BLAKE2Variant.s, 256);
 
-/// Convience alias for $(REF digest, std,digest) using the BLAKE2b-512 implementation.
+/// Convience alias using the BLAKE2b-512 implementation.
 auto blake2b_Of(T...)(T data) { return digest!(BLAKE2b512, T)(data); }
 /// Alias of blake2b_Of. 
 alias blake2_Of = blake2b_Of;
-/// Convience alias for $(REF digest, std,digest) using the BLAKE2s-256 implementation.
+/// Convience alias using the BLAKE2s-256 implementation.
 auto blake2s_Of(T...)(T data) { return digest!(BLAKE2s256, T)(data); }
 
-/// OOP API BLAKE2 implementation aliases.
+/// OOP API BLAKE2b implementation alias.
 public alias BLAKE2b512Digest = WrapperDigest!BLAKE2b512;
-/// Ditto
+/// OOP API BLAKE2s implementation alias.
 public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
 
-/// Of course they correspond to the digest API!
+/// Structure conforms to the Digest API.
 @safe unittest
 {
     assert(isDigest!BLAKE2b512);
     assert(isDigest!BLAKE2s256);
 }
 
-/// Of course they have a blockSize!
+/// Structure emits a blockSize field.
 @safe unittest
 {
     assert(hasBlockSize!BLAKE2b512);
     assert(hasBlockSize!BLAKE2s256);
 }
 
-/// Testing "Of" wrappers against digest wrappers.
+/// Using digest template.
 @safe unittest
 {
     enum TEXT = "abc";
@@ -340,7 +332,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     assert(blake2s_Of(TEXT) == digest!BLAKE2s256(TEXT));
 }
 
-/// Testing template API
+/// Using the template API.
 @system unittest
 {
     import std.conv : hexString;
@@ -353,7 +345,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
-/// Test against empty input
+/// Using convenience aliases.
 @safe unittest
 {
     assert(toHexString!(LetterCase.lower)(blake2b_Of("")) ==
@@ -363,7 +355,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
-/// Test against "abc"
+/// Using convenience aliases on "abc".
 @safe unittest
 {
     assert(toHexString!(LetterCase.lower)(blake2b_Of("abc")) ==
@@ -374,7 +366,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
 }
 
 
-/// Testing template API against one million 'a'
+/// Using the template API to hash one million 'a'.
 @system unittest
 {
     import std.conv : hexString;
@@ -394,7 +386,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5"));
 }
 
-/// Testing OOP API
+/// Using the OOP API.
 @system unittest
 {
     import std.conv : hexString;
@@ -413,13 +405,12 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
-/// BLAKE2s Template usage
+/// Template API delegate.
 @system unittest
 {
     import std.conv : hexString;
     
-    // Let's use the template features:
-    // NOTE: When passing a digest to a function, it must be passed by reference!
+    // NOTE: Because the digest is a structure, it must be passed by reference.
     void doSomething(T)(ref T hash)
         if (isDigest!T)
         {
@@ -438,7 +429,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
-/// Keying digests
+/// Keying digests.
 @system unittest
 {
     // NOTE: This implementation is not yet compatible with the hmac/HMAC
@@ -462,13 +453,13 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     b2b.put(data);
     assert(b2b.finish().toHexString!(LetterCase.lower) ==
         "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
-        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1"
-        , "BLAKE2b+secret failed");
+        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+        "BLAKE2b secret failed");
     
     BLAKE2s256 b2s;
     b2s.key(secret2s);
     b2s.put(data);
     assert(b2s.finish().toHexString!(LetterCase.lower) ==
-        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b"
-        , "BLAKE2s+secret failed");
+        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+        "BLAKE2s secret failed");
 }
