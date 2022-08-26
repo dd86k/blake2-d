@@ -6,15 +6,15 @@ algorithms and is compatible with the Phobos Digest API (std.digest).
 BLAKE2 was introduced in 2015 as IETF RFC 7693. You can visit
 [the website](https://www.blake2.net/) for more information.
 
-Features (still WIP!):
+Features (so far):
 
-- [x] BLAKE2b-512 and BLAKE2s-256.
+- [x] Supports BLAKE2b and BLAKE2s.
 - [x] Custom digest sizes.
 - [x] Supports keying dynamically.
 - [ ] Supports keying at compile-time.
 - [ ] BLAKE2bp and BLAKE2sp variants.
-
-NOTE: May be incompatible with HMAC.
+- [ ] Validated working with HMAC.
+- [ ] BetterC (removes OOP API).
 
 Compatible and tested with DMD, GDC, and LDC.
 
