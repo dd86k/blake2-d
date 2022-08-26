@@ -7,7 +7,7 @@ module blake2d;
 // NOTE: The Phobos Digest API have no support for keyed hashes.
 
 /// Version string of blake2-d that can be used for printing purposes.
-public enum BLAKE2D_VERSION_STRING = "0.2.0";
+public enum BLAKE2D_VERSION_STRING = "0.3.0";
 
 private import std.digest;
 private import core.bitop : ror;
