@@ -44,72 +44,95 @@ private immutable uint[8] B2S_IV = [
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
 
+//TODO: To remove by 0.4.0 or later.
 /// Used with the BLAKE2 structure template to make the BLAKE2s and BLAKE2b
 /// aliases.
+deprecated("Use BLAKE2b, BLAKE2s, or BLAKE2Impl structure templates. This will be removed in 0.4.0")
 enum BLAKE2Variant {
     b,  /// BLAKE2b
     s,  /// BLAKE2s
 }
 
-/// BLAKE2 structure template.
+/// Template API alias for BLAKE2b-512.
+public alias BLAKE2b512 = BLAKE2b!();
+/// Alias to BLAKE2b512.
+/// 
+/// This is the recommended alias to use for most cases.
+public alias BLAKE2 = BLAKE2b512;
+/// Template API alias for BLAKE2s-256.
+public alias BLAKE2s256 = BLAKE2s!();
+
+/// BLAKE2b structure template.
 ///
-/// It is recommended to use the BLAKE2b512 and BLAKE2s256 template aliases.
+/// Use this if you wish to set a custom digest size and a key (compile-time).
+/// It is recommended to use the BLAKE2b512 alias over this.
 ///
-/// BLAKE2X is not supported.
+/// Params:
+///     digestSize = Output digest size in bits. Optional.
+///     key = User-supplied key, cannot exceed 64 bytes. Optional.
+struct BLAKE2b(uint digestSize = 512)
+{
+    static assert(digestSize >= 8 && digestSize <= 512,
+        "BLAKE2b digest size must be between 8 and 512 bits.");
+    BLAKE2Impl!(ulong, digestSize, B2B_IV, 12, 32, 24, 16, 63) instance;
+    alias instance this;
+}
+
+/// BLAKE2s structure template.
+///
+/// Use this if you wish to set a custom digest size and a key (compile-time).
+/// It is recommended to use the BLAKE2s256 alias over this.
+///
+/// Params:
+///     digestSize = Output digest size in bits. Optional.
+///     key = User-supplied key, cannot exceed 32 bytes. Optional.
+struct BLAKE2s(uint digestSize = 256)
+{
+    static assert(digestSize >= 8 && digestSize <= 256,
+        "BLAKE2s digest size must be between 8 and 256 bits.");
+    BLAKE2Impl!(uint, digestSize, B2S_IV, 10, 16, 12, 8, 7) instance;
+    alias instance this;
+}
+
+/// BLAKE2 implementation.
+///
+/// It is strongly recommended to use the BLAKE2b512 and BLAKE2s256 aliases
+/// instead of playing with this.
+/// 
+/// If you wish to set a digest size, use the BLAKE2b and BLAKE2s structure
+/// templates.
+///
+/// BLAKE2X (XOF) is not supported.
 ///
 /// Examples:
 /// ---
-/// // Defines BLAKE2s-160 with Template API, OOP API, and helper function.
-/// alias BLAKE2s160 = BLAKE2!(BLAKE2Variant.s, 160);
+/// // Defines BLAKE2s160 with Template API, OOP API, and helper function.
+/// alias BLAKE2s160 = BLAKE2s!(160);
 /// auto blake2s160_Of(T...)(T data) { return digest!(BLAKE2s160, T)(data); }
 /// public alias BLAKE2s160Digest = WrapperDigest!BLAKE2s160;
 /// ---
 ///
 /// Params:
-///   var = BLAKE2 hash variation.
-///   digestSize = Digest size in bits.
+///     T = Type alias. ulong for BLAKE2b and uint for BLAKE2s. Untested with other types.
+///     digestSize = Digest size in bits.
+///     iv = Initial vectors. If userkey is supplied, this is ignored.
+///     userkey = Compile-time key.
+///     ROUNDS = Number of rounds when compressing.
+///     R1 = R1 value for G function.
+///     R2 = R2 value for G function.
+///     R3 = R3 value for G function.
+///     R4 = R4 value for G function. 
 ///
 /// Throws: No exceptions are thrown.
-struct BLAKE2(BLAKE2Variant var, uint digestSize)
+struct BLAKE2Impl(T, uint digestSize, alias iv,
+    size_t ROUNDS, uint R1, uint R2, uint R3, uint R4)
 {
     @safe: @nogc: nothrow: pure:
     
     static assert(digestSize > 0, "Digest size must higher than zero.");
     static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
     
-    static if (var == BLAKE2Variant.b) { // BLAKE2b
-        // 8 to 512 bits
-        static assert(digestSize >= 8 && digestSize <= 512,
-            "BLAKE2b digest size must be between 8 and 512 bits.");
-        
-        private enum MAXKEYSIZE = 32; // In bytes
-        private enum MAXED = digestSize == 512;
-        private enum BSIZE = 128;   /// Buffer size, "bb" variable
-        private enum ROUNDS = 12;
-        private enum R1 = 32;
-        private enum R2 = 24;
-        private enum R3 = 16;
-        private enum R4 = 63;
-        private alias IV = B2B_IV;
-        private alias inner_t = ulong;
-    } else static if (var == BLAKE2Variant.s) { // BLAKE2s
-        // 8 to 256 bits
-        static assert(digestSize >= 8 && digestSize <= 256,
-            "BLAKE2s digest size must be between 8 and 256 bits.");
-        
-        private enum MAXKEYSIZE = 32; // In bytes
-        private enum MAXED = digestSize == 256;
-        private enum BSIZE = 64;    /// Buffer size, "bb" variable
-        private enum ROUNDS = 10;
-        private enum R1 = 16;
-        private enum R2 = 12;
-        private enum R3 = 8;
-        private enum R4 = 7;
-        private alias IV = B2S_IV;
-        private alias inner_t = uint;
-    } else static assert(0, "Invalid BLAKE2 variant.");
-    
-    enum blockSize = digestSize;    /// Digest size in bits
+    enum blockSize = digestSize;    /// Digest size in bits.
     
     /// Initiate or reset the state of the instance.
     void start()
@@ -125,10 +148,10 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize)
     /// Params: input = Key.
     void key(scope const(ubyte)[] input)
     {
-        enum MASK  = BSIZE - 1;
+        enum MASK  = messageSize - 1;
         h[0] ^= ((input.length & MASK) << 8);
-        put(input.length > BSIZE ? input[0..BSIZE] : input);
-        c = BSIZE;
+        put(input.length > messageSize ? input[0..messageSize] : input);
+        c = messageSize;
     }
     
     /// Feed the algorithm with data.
@@ -142,7 +165,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize)
         {
             foreach (const word; (cast(size_t*) input.ptr)[0 .. input.length / size_t.sizeof])
             {
-                if (c >= BSIZE)
+                if (c >= messageSize)
                 {
                     t[0] += c;
                     if (t[0] < c) ++t[1]; // Overflow
@@ -158,7 +181,7 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize)
         // Process remainder bytewise.
         foreach (const i; input)
         {
-            if (c >= BSIZE)
+            if (c >= messageSize)
             {
                 t[0] += c;
                 if (t[0] < c) ++t[1]; // Overflow
@@ -179,19 +202,13 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize)
         
         // Zero-pad message buffer
         m8[c..$] = 0;
-        l = ~IV[6];
+        v14 = ~iv[6];
         compress;
         
         // Clear out possible sensitive data
         t[0] = t[1] = c = 0; // clear size information
         mz[] = 0; // clear input message buffer
-        // Only clear remaining of state if digest isn't fulled used.
-        // e.g., BLAKE2b-512 has a digest size of 64 bytes
-        //       ulong[8] (8*8) is 64 bytes of state
-        //       So is BLAKE2x-256 is used, a digest of 32 bytes
-        //       state (h) will still be 64 bytes, so upper range is cleared
-        static if (MAXED == false)
-            h8[digestSizeBytes..$] = 0; // clear unused state space
+        h8[digestSizeBytes..$] = 0; // clear unused state space
         
         return h8[0..digestSizeBytes];
     }
@@ -199,37 +216,38 @@ struct BLAKE2(BLAKE2Variant var, uint digestSize)
 private:
     
     enum digestSizeBytes = digestSize / 8;
+    /// Message size in bytes.
+    enum messageSize = 16 * T.sizeof;
+    /// State size in bytes.
+    enum stateSize = 8 * T.sizeof;
+    
+    union // input message buffer
+    {
+        size_t[messageSize / size_t.sizeof] mz = void; /// Message (m) as size_t
+        T[16] m;   /// Message (m)
+        ubyte[16 * T.sizeof] m8; /// Message (m) as ubyte
+    }
+    
     //           3 2 1 0
     // p[0] = 0x0101kknn
     // kk - Key size. Set to zero since HMAC is done elsewhere.
     // nn - Digest size in bytes.
     enum p0 = 0x0101_0000 ^ digestSizeBytes;
-    enum msz = 16 * inner_t.sizeof; /// message size in bytes
-    enum hsz = 8 * inner_t.sizeof;  /// state size in bytes
-    
-    static assert(msz == BSIZE); // e.g. 128 for b2b and 64 for b2s
-    static assert(hsz == BSIZE / 2); // e.g., 64 for b2b and 32 for b2s
-    
-    union // input message buffer
-    {
-        size_t[BSIZE / size_t.sizeof] mz = void; /// Message (m) as size_t
-        inner_t[16] m;   /// Message (m)
-        ubyte[16 * inner_t.sizeof] m8; /// Message (m) as ubyte
-    }
     union // state
     {
-        inner_t[8] h = (IV[0] ^ p0) ~ IV[1..$];   /// State
-        ubyte[8 * inner_t.sizeof] h8;   /// State in byte-size
+        T[8] h = (iv[0] ^ p0) ~ iv[1..$];
+        ubyte[stateSize] h8;   /// State in byte-size
     }
-    inner_t[2] t;      /// Total count of input size (t).
+    
+    T[2] t;      /// Total count of input size (t).
     size_t c;          /// Counter, index for input message.
-    inner_t l = IV[6]; /// On last block, this turns from IV6 to ~IV6.
+    T v14 = iv[6]; /// Vector 14. On last block, this turns from IV6 to ~IV6.
     
     void compress() @trusted
     {
-        //TODO: bswap m on BigEndian platforms?
+        //TODO: bswap message or vectors on BigEndian platforms?
         
-        inner_t[16] v = [
+        T[16] v = [
             h[0],
             h[1],
             h[2],
@@ -238,14 +256,14 @@ private:
             h[5],
             h[6],
             h[7],
-            IV[0],
-            IV[1],
-            IV[2],
-            IV[3],
-            t[0] ^ IV[4],
-            t[1] ^ IV[5],
-            l, // Avoids a branch
-            IV[7],
+            iv[0],
+            iv[1],
+            iv[2],
+            iv[3],
+            t[0] ^ iv[4],
+            t[1] ^ iv[5],
+            v14,
+            iv[7],
         ];
         
         // Assert i=0 v[16]
@@ -279,7 +297,7 @@ private:
         // Assert h[8]
     }
     
-    static void G(ref inner_t[16] v, uint a, uint b, uint c, uint d, inner_t x, inner_t y)
+    static void G(ref T[16] v, uint a, uint b, uint c, uint d, T x, T y)
     {
         v[a] = v[a] + v[b] + x;
         v[d] = ror(v[d] ^ v[a], R1);
@@ -292,11 +310,6 @@ private:
     }
 }
 
-/// Template API alias for BLAKE2b-512.
-public alias BLAKE2b512 = BLAKE2!(BLAKE2Variant.b, 512);
-/// Template API alias for BLAKE2s-256.
-public alias BLAKE2s256 = BLAKE2!(BLAKE2Variant.s, 256);
-
 /// Convience alias using the BLAKE2b-512 implementation.
 auto blake2b_Of(T...)(T data) { return digest!(BLAKE2b512, T)(data); }
 /// Alias of blake2b_Of. 
@@ -304,10 +317,25 @@ alias blake2_Of = blake2b_Of;
 /// Convience alias using the BLAKE2s-256 implementation.
 auto blake2s_Of(T...)(T data) { return digest!(BLAKE2s256, T)(data); }
 
+/// Adds keyed to digest.
+class WrapperDigestKeyed(T) if (isDigest!T) : WrapperDigest!T
+{
+    /// Initiates a key with digest.
+    /// This is meant to be used after the digest initiation.
+    /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
+    /// BLAKE2s. If the limit is reached, it fails silenty by truncating
+    /// key data.
+    /// Params: input = Key.
+    @trusted nothrow void key(scope const(ubyte)[] input)
+    {
+        _digest.key(input);
+    }
+}
+
 /// OOP API BLAKE2b implementation alias.
-public alias BLAKE2b512Digest = WrapperDigest!BLAKE2b512;
+public alias BLAKE2b512Digest = WrapperDigestKeyed!BLAKE2b512;
 /// OOP API BLAKE2s implementation alias.
-public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
+public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
 
 /// Structure conforms to the Digest API.
 @safe unittest
@@ -321,6 +349,13 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
 {
     assert(hasBlockSize!BLAKE2b512);
     assert(hasBlockSize!BLAKE2s256);
+}
+
+/// Default alises digest length in Bytes.
+@safe unittest
+{
+    assert(digestLength!BLAKE2b512 == 64);
+    assert(digestLength!BLAKE2s256 == 32);
 }
 
 /// Using digest template.
@@ -429,7 +464,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
-/// Keying digests.
+/// Keying digests at run-time using Template API.
 @system unittest
 {
     // NOTE: This implementation is not yet compatible with the hmac/HMAC
@@ -446,7 +481,7 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     auto secret2s = hexString!(
         "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
         .representation;
-    auto data = hexString!("000102").representation;
+    immutable(ubyte)[] data = hexString!("000102").representation;
     
     BLAKE2b512 b2b;
     b2b.key(secret2b);
@@ -457,6 +492,36 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "BLAKE2b secret failed");
     
     BLAKE2s256 b2s;
+    b2s.key(secret2s);
+    b2s.put(data);
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+        "BLAKE2s secret failed");
+}
+
+/// Keying digests at run-time using OOP API.
+@system unittest
+{
+    import std.ascii : LetterCase;
+    import std.string : representation;
+    import std.conv : hexString;
+    
+    enum secret2b = cast(ubyte[])hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"~
+        "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
+    enum secret2s = cast(ubyte[])hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    auto data = hexString!("000102").representation;
+    
+    BLAKE2b512Digest b2b = new BLAKE2b512Digest();
+    b2b.key(secret2b);
+    b2b.put(data);
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+        "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
+        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+        "BLAKE2b secret failed");
+    
+    BLAKE2s256Digest b2s = new BLAKE2s256Digest();
     b2s.key(secret2s);
     b2s.put(data);
     assert(b2s.finish().toHexString!(LetterCase.lower) ==
