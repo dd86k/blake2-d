@@ -1,14 +1,14 @@
 # blake2-d
 
-BLAKE2 library written in D implementing the BLAKE2b and BLAKE2s hashing
+This is a library written in D implementing the BLAKE2b and BLAKE2s hashing
 algorithms and is compatible with the Phobos Digest API (std.digest).
 
-BLAKE2 was introduced in 2015 as IETF RFC 7693. You can visit
+The BLAKE2 algorithm was introduced in 2015 as IETF RFC 7693. You can visit
 [the website](https://www.blake2.net/) for more information.
 
-Features (still WIP!):
+Features (so far):
 
-- [x] BLAKE2b-512 and BLAKE2s-256.
+- [x] Supports BLAKE2b and BLAKE2s.
 - [x] Custom digest sizes.
 - [x] Keying at runtime (Template API).
 - [ ] Keying at runtime (OOP API).
@@ -82,7 +82,9 @@ digest for a one-time use in a short scope, there's `std.typecons.scoped`.
 
 ### Keying
 
-Currently, the only way to supply a key is with the `key` function:
+A key can be supplied to the digest using the `key` function.
+
+It must be supplied before putting data in.
 
 ```d
 import std.string : representation;
