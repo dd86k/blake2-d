@@ -10,11 +10,15 @@ Features (still WIP!):
 
 - [x] BLAKE2b-512 and BLAKE2s-256.
 - [x] Custom digest sizes.
-- [x] Supports keying dynamically.
-- [ ] Supports keying at compile-time.
-- [ ] BLAKE2bp and BLAKE2sp variants.
+- [x] Keying at runtime (Template API).
+- [ ] Keying at runtime (OOP API).
+- [ ] Keying at compile-time (Template API).
+- [ ] Keying at compile-time (OOP API).
+- [ ] Support for BLAKE2bp and BLAKE2sp.
 
-NOTE: May be incompatible with HMAC.
+Notes:
+- May be incompatible with HMAC.
+- BLAKE2X was never finished, so it is not implemented (including XOF).
 
 Compatible and tested with DMD, GDC, and LDC.
 
@@ -38,7 +42,8 @@ The template API uses a structure template and is a good choice if your
 application only plans to support one digest algorithm.
 
 ```d
-// NOTE: hexString is from std.conv
+import std.cov : hexString;
+
 BLAKE2b512 b2b512;
 b2b512.put("abc");
 assert(b2b512.finish() == cast(ubyte[]) hexString!(
@@ -85,6 +90,7 @@ import std.conv : hexString;
 
 // Key can be between 1 to 32 bytes for BLAKE2s256
 // and 1 to 64 bytes for BLAKE2b512.
+// Though recommended key sizes are their respective maximum sizes.
 auto secret = hexString!(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
     .representation;
