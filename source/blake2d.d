@@ -44,6 +44,10 @@ private immutable uint[8] B2S_IV = [
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
 
+//TODO: Consider remaking template structure.
+//      Should be possible to easily make BLAKE2b and BLAKE2s struct templates
+//      with a base implementation template instead of an enum.
+
 /// Used with the BLAKE2 structure template to make the BLAKE2s and BLAKE2b
 /// aliases.
 enum BLAKE2Variant {
@@ -429,6 +433,33 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
 }
 
+/// Test with HMAC
+/+@system unittest
+{
+    import std.ascii : LetterCase;
+    import std.string : representation;
+    import std.digest.hmac : hmac;
+    
+    immutable string input =
+        "The quick brown fox jumps over the lazy dog";
+    auto secret = "secret".representation;
+    
+    assert(input
+        .representation
+        .hmac!BLAKE2s256(secret)
+        .toHexString!(LetterCase.lower) ==
+	    "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
+        "hmac+blake2s256 failed");
+    
+    assert(input
+        .representation
+        .hmac!BLAKE2b512(secret)
+        .toHexString!(LetterCase.lower) ==
+	    "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
+        "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
+        "hmac+blake2b512 failed");
+}+/
+
 /// Keying digests.
 @system unittest
 {
@@ -462,4 +493,13 @@ public alias BLAKE2s256Digest = WrapperDigest!BLAKE2s256;
     assert(b2s.finish().toHexString!(LetterCase.lower) ==
         "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
+    
+    /*Digest oob2s = new BLAKE2s256Digest();
+    
+    oob2s.key(secret2s);
+    oob2s.put(data);
+    
+    assert(oob2s.finish().toHexString!(LetterCase.lower) ==
+        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+        "BLAKE2s secret failed");*/
 }
