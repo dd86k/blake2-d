@@ -50,15 +50,6 @@ private immutable uint[8] B2S_IV = [
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
 
-//TODO: To remove by 0.4.0 or later.
-/// Used with the BLAKE2 structure template to make the BLAKE2s and BLAKE2b
-/// aliases.
-deprecated("Use BLAKE2b, BLAKE2s, or BLAKE2Impl structure templates.")
-enum BLAKE2Variant {
-    b,  /// BLAKE2b
-    s,  /// BLAKE2s
-}
-
 /// Template API alias for BLAKE2b-512.
 public alias BLAKE2b512 = BLAKE2b!();
 /// Alias to BLAKE2b512.
@@ -70,12 +61,11 @@ public alias BLAKE2s256 = BLAKE2s!();
 
 /// BLAKE2b structure template.
 ///
-/// Use this if you wish to set a custom digest size and a key (compile-time).
+/// Use this if you wish to set a custom digest size.
 /// It is recommended to use the BLAKE2b512 alias over this.
 ///
 /// Params:
 ///     digestSize = Output digest size in bits. Optional.
-///     key = User-supplied key, cannot exceed 64 bytes. Optional.
 struct BLAKE2b(uint digestSize = 512)
 {
     static assert(digestSize >= 8 && digestSize <= 512,
@@ -86,12 +76,11 @@ struct BLAKE2b(uint digestSize = 512)
 
 /// BLAKE2s structure template.
 ///
-/// Use this if you wish to set a custom digest size and a key (compile-time).
+/// Use this if you wish to set a custom digest size.
 /// It is recommended to use the BLAKE2s256 alias over this.
 ///
 /// Params:
 ///     digestSize = Output digest size in bits. Optional.
-///     key = User-supplied key, cannot exceed 32 bytes. Optional.
 struct BLAKE2s(uint digestSize = 256)
 {
     static assert(digestSize >= 8 && digestSize <= 256,
@@ -122,7 +111,6 @@ struct BLAKE2s(uint digestSize = 256)
 ///     T = Type alias. ulong for BLAKE2b and uint for BLAKE2s. Untested with other types.
 ///     digestSize = Digest size in bits.
 ///     iv = Initial vectors. If userkey is supplied, this is ignored.
-///     userkey = Compile-time key.
 ///     ROUNDS = Number of rounds when compressing.
 ///     R1 = R1 value for G function.
 ///     R2 = R2 value for G function.
@@ -150,9 +138,10 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     ///
     /// This is meant to be used after the digest initiation.
     /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
-    /// BLAKE2s. If the limit is reached, this returns false.
+    /// BLAKE2s.
     ///
-    /// The RFC disallows keying after data.
+    /// The key is refused if it exceeds the message size, or
+    /// when there is already a key or data.
     /// Params: input = Key.
     /// Returns: true if accepted, false if key wasn't accepted.
     bool key(scope const(ubyte)[] input)
@@ -170,6 +159,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     }
     
     /// Feed the algorithm with data.
+    ///
     /// Also implements the $(REF isOutputRange, std,range,primitives)
     /// interface for `ubyte` and `const(ubyte)[]`.
     /// Params: input = Input data to digest
@@ -210,7 +200,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     }
     
     /// Returns the finished hash.
-    /// Returns: Raw digest data.
+    /// Returns: Digest.
     ubyte[digestSizeBytes] finish()
     {
         // Final counter update
@@ -331,7 +321,7 @@ private:
 
 /// Convience alias using the BLAKE2b-512 implementation.
 auto blake2b_Of(T...)(T data) { return digest!(BLAKE2b512, T)(data); }
-/// Alias of blake2b_Of. 
+/// Alias of blake2b_Of. Since "BLAKE2" refers to BLAKE2b.
 alias blake2_Of = blake2b_Of;
 /// Convience alias using the BLAKE2s-256 implementation.
 auto blake2s_Of(T...)(T data) { return digest!(BLAKE2s256, T)(data); }
