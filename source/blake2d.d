@@ -364,6 +364,56 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     assert(digestLength!BLAKE2s256 == 32);
 }
 
+/// Empty input.
+@safe unittest
+{
+    import std.conv : hexString;
+    
+    assert(blake2b_Of("") == hexString!
+        ("786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
+         "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"));
+    assert(blake2s_Of("") == hexString!
+        ("69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9"));
+}
+
+/// No input.
+@safe unittest
+{
+    import std.conv : hexString;
+    
+    BLAKE2b512 b2b;
+    b2b.start();
+    assert(b2b.finish() == hexString!
+        ("786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
+         "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"));
+    
+    BLAKE2s256 b2s;
+    b2s.start();
+    assert(b2s.finish() == hexString!
+        ("69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9"));
+}
+
+/// Hasing "abc" using the template API.
+@safe unittest
+{
+    import std.conv : hexString;
+    
+    // @safe code enforces type safety
+    static immutable ubyte[] abc = [ 'a', 'b', 'c' ];
+    
+    BLAKE2s256 b2s;
+    b2s.put(abc);
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+    
+    BLAKE2b512 b2b;
+    b2b.put(abc);
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+}
+
+
 /// Using digest template.
 @safe unittest
 {
@@ -373,36 +423,13 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     assert(blake2s_Of(TEXT) == digest!BLAKE2s256(TEXT));
 }
 
-/// Using the template API.
-@system unittest
-{
-    import std.conv : hexString;
-    
-    ubyte[] s = [ 'a', 'b', 'c' ];
-    
-    BLAKE2s256 b2s;
-    b2s.put(s);
-    assert(b2s.finish() == cast(ubyte[])hexString!(
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
-}
-
-/// Using convenience aliases.
-@safe unittest
-{
-    assert(toHexString!(LetterCase.lower)(blake2b_Of("")) ==
-        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
-        "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
-    assert(toHexString!(LetterCase.lower)(blake2s_Of("")) ==
-        "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
-}
-
 /// Using convenience aliases on "abc".
 @safe unittest
 {
-    assert(toHexString!(LetterCase.lower)(blake2b_Of("abc")) ==
+    assert(blake2b_Of("abc").toHexString!(LetterCase.lower) ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
-    assert(toHexString!(LetterCase.lower)(blake2s_Of("abc")) ==
+    assert(blake2s_Of("abc").toHexString!(LetterCase.lower) ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
@@ -417,14 +444,14 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     
     BLAKE2b512 b2b;
     b2b.put(onemilliona);
-    assert(b2b.finish() == cast(ubyte[]) hexString!(
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
         "98fb3efb7206fd19ebf69b6f312cf7b64e3b94dbe1a17107913975a793f177e1"~
-        "d077609d7fba363cbba00d05f7aa4e4fa8715d6428104c0a75643b0ff3fd3eaf"));
+        "d077609d7fba363cbba00d05f7aa4e4fa8715d6428104c0a75643b0ff3fd3eaf");
     
     BLAKE2s256 b2s;
     b2s.put(onemilliona);
-    assert(b2s.finish() == cast(ubyte[]) hexString!(
-        "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5"));
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5");
 }
 
 /// Using the OOP API.
@@ -436,14 +463,14 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     
     Digest b2b = new BLAKE2b512Digest();
     b2b.put(s);
-    assert(b2b.finish() == cast(ubyte[]) hexString!(
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"));
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     
     Digest b2s = new BLAKE2s256Digest();
     b2s.put(s);
-    assert(b2s.finish() == cast(ubyte[]) hexString!(
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// Template API delegate.
@@ -460,14 +487,14 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2b512 b2b;
     b2b.start();
     doSomething(b2b);
-    assert(b2b.finish() == cast(ubyte[]) hexString!(
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"));
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     BLAKE2s256 b2s;
     b2s.start();
     doSomething(b2s);
-    assert(b2s.finish() == cast(ubyte[]) hexString!(
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"));
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// Test with HMAC
