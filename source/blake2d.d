@@ -12,6 +12,12 @@ public enum BLAKE2D_VERSION_STRING = "0.3.0";
 private import std.digest;
 private import core.bitop : ror;
 
+// Private status flags for enforcing behavior
+private enum {
+    /// Has data or key, used in key function only.
+    STATUS_HASDATA = 1,
+}
+
 // "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
 // SIGMA[10..11] = SIGMA[0..1]."
 /// Sigma scheduling.
@@ -145,11 +151,15 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     /// This is meant to be used after the digest initiation.
     /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
     /// BLAKE2s. If the limit is reached, this returns false.
+    ///
+    /// The RFC disallows keying after data.
     /// Params: input = Key.
     /// Returns: true if accepted, false if key wasn't accepted.
     bool key(scope const(ubyte)[] input)
     {
         if (input.length > messageSize)
+            return false;
+        if (status & STATUS_HASDATA)
             return false;
         
         enum MASK  = messageSize - 1;
@@ -165,6 +175,8 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     /// Params: input = Input data to digest
     void put(scope const(ubyte)[] input...) @trusted
     {
+        status |= STATUS_HASDATA;
+        
         // Process wordwise if properly aligned.
         if ((c | cast(size_t) input.ptr) % size_t.alignof == 0)
         {
@@ -219,7 +231,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     }
     
 private:
-    
+    /// Digest size in bytes, as digestSize is in bits.
     enum digestSizeBytes = digestSize / 8;
     /// Message size in bytes.
     enum messageSize = 16 * T.sizeof;
@@ -244,13 +256,15 @@ private:
         ubyte[stateSize] h8;   /// State in byte-size
     }
     
-    T[2] t;      /// Total count of input size (t).
-    size_t c;          /// Counter, index for input message.
-    T v14 = iv[6]; /// Vector 14. On last block, this turns from IV6 to ~IV6.
+    T[2] t;         /// Total count of input size (t).
+    size_t c;       /// Counter, index for input message.
+    T v14 = iv[6];  /// Vector 14. On last block, this turns from IV6 to ~IV6.
+    
+    int status;     /// Internal status flags.
     
     void compress() @trusted
     {
-        //TODO: bswap message or vectors on BigEndian platforms?
+        // TODO: bswap message or vectors on BigEndian platforms?
         
         T[16] v = [
             h[0],
@@ -497,6 +511,37 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
+/// Test minimum digest size.
+@safe unittest
+{
+    BLAKE2b!8 b2b;
+    b2b.start();
+    assert(b2b.finish().length == 1);
+    
+    BLAKE2s!8 b2s;
+    b2s.start();
+    assert(b2s.finish().length == 1);
+}
+
+/// Test incremental usage.
+@safe unittest
+{
+    BLAKE2b512 b2b;
+    b2b.put([ 'a' ]);
+    b2b.put([ 'b' ]);
+    b2b.put([ 'c' ]);
+    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+    
+    BLAKE2s256 b2s;
+    b2s.put([ 'a' ]);
+    b2s.put([ 'b' ]);
+    b2s.put([ 'c' ]);
+    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+}
+
 /// Test with HMAC
 /+@system unittest
 {
@@ -550,6 +595,34 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
         "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
 }+/
+
+/// Edge cases with keying
+@safe unittest
+{
+    BLAKE2b512 b2b;
+    BLAKE2s256 b2s;
+    
+    // RFC allows zero-length keys
+    assert(b2s.key([]));
+    assert(b2b.key([]));
+}
+@safe unittest
+{
+    BLAKE2b512 b2b;
+    BLAKE2s256 b2s;
+    
+    // Test lengths exceeding acceptable key sizes
+    assert(b2s.key(new ubyte[128]) == false);
+    assert(b2s.key(new ubyte[128]) == false);
+    
+    // Test max-length keys
+    assert(b2s.key(new ubyte[32]));
+    assert(b2b.key(new ubyte[64]));
+    
+    // Cannot key again or key after data
+    assert(b2s.key([]) == false);
+    assert(b2b.key([]) == false);
+}
 
 /// Keying digests at run-time using Template API.
 @system unittest
