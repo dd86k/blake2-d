@@ -141,17 +141,22 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     }
     
     /// Initiates a key with digest.
+    ///
     /// This is meant to be used after the digest initiation.
     /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
-    /// BLAKE2s. If the limit is reached, it fails silenty by truncating
-    /// key data.
+    /// BLAKE2s. If the limit is reached, this returns false.
     /// Params: input = Key.
-    void key(scope const(ubyte)[] input)
+    /// Returns: true if accepted, false if key wasn't accepted.
+    bool key(scope const(ubyte)[] input)
     {
+        if (input.length > messageSize)
+            return false;
+        
         enum MASK  = messageSize - 1;
         h[0] ^= ((input.length & MASK) << 8);
-        put(input.length > messageSize ? input[0..messageSize] : input);
+        put(input);
         c = messageSize;
+        return true;
     }
     
     /// Feed the algorithm with data.
@@ -326,9 +331,10 @@ class WrapperDigestKeyed(T) if (isDigest!T) : WrapperDigest!T
     /// BLAKE2s. If the limit is reached, it fails silenty by truncating
     /// key data.
     /// Params: input = Key.
-    @trusted nothrow void key(scope const(ubyte)[] input)
+    @trusted void key(scope const(ubyte)[] input)
     {
-        _digest.key(input);
+        import std.exception : enforce;
+        enforce(_digest.key(input), "Key was not accepted");
     }
 }
 
@@ -538,7 +544,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     immutable(ubyte)[] data = hexString!("000102").representation;
     
     BLAKE2b512 b2b;
-    b2b.key(secret2b);
+    assert(b2b.key(secret2b));
     b2b.put(data);
     assert(b2b.finish().toHexString!(LetterCase.lower) ==
         "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
@@ -546,7 +552,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
         "BLAKE2b secret failed");
     
     BLAKE2s256 b2s;
-    b2s.key(secret2s);
+    assert(b2s.key(secret2s));
     b2s.put(data);
     assert(b2s.finish().toHexString!(LetterCase.lower) ==
         "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
