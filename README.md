@@ -6,12 +6,16 @@ algorithms and is compatible with the Phobos Digest API (std.digest).
 The BLAKE2 algorithm was introduced in 2015 as IETF RFC 7693. You can visit
 [the website](https://www.blake2.net/) for more information.
 
+    ⚠️ Not yet audited by a cryptography expert.
+    
+    Tests are performed against output of other reputable tools.
+
 Features (so far):
 
 - [x] Supports BLAKE2b and BLAKE2s.
 - [x] Custom digest sizes.
 - [x] Keying at runtime (Template API).
-- [ ] Keying at runtime (OOP API).
+- [x] Keying at runtime (OOP API).
 - [ ] Keying at compile-time (Template API).
 - [ ] Keying at compile-time (OOP API).
 - [ ] Support for BLAKE2bp and BLAKE2sp.
@@ -90,8 +94,8 @@ It must be supplied before putting data in.
 import std.string : representation;
 import std.conv : hexString;
 
-// Key can be between 1 to 32 bytes for BLAKE2s256
-// and 1 to 64 bytes for BLAKE2b512.
+// Key can be between 1 to 32 bytes for BLAKE2s256 and 1 to 64 bytes for
+// BLAKE2b512, respective of digest size.
 // Though recommended key sizes are their respective maximum sizes.
 auto secret = hexString!(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
@@ -100,7 +104,7 @@ auto secret = hexString!(
 auto data = hexString!("000102").representation;
 
 BLAKE2s256 b2s;
-b2s.key(secret);
+assert(b2s.key(secret), "Keying failed");
 b2s.put(data);
 
 assert(b2s.finish().toHexString!(LetterCase.lower) ==
