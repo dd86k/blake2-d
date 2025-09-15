@@ -357,6 +357,9 @@ public alias BLAKE2b512Digest = WrapperDigestKeyed!BLAKE2b512;
 /// OOP API BLAKE2s implementation alias.
 public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
 
+/// Internal alias to help compare strings
+private alias toHexLower = toHexString!(LetterCase.lower);
+
 /// Structure conforms to the Digest API.
 @safe unittest
 {
@@ -381,48 +384,42 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
 /// Empty input.
 @safe unittest
 {
-    import std.conv : hexString;
-    
-    assert(blake2b_Of("") == hexString!
-        ("786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
-         "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"));
-    assert(blake2s_Of("") == hexString!
-        ("69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9"));
+    assert(blake2b_Of("").toHexLower() ==
+        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
+        "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+    assert(blake2s_Of("").toHexLower() ==
+        "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
 /// No input.
 @safe unittest
 {
-    import std.conv : hexString;
-    
     BLAKE2b512 b2b;
     b2b.start();
-    assert(b2b.finish() == hexString!
-        ("786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
-         "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"));
+    assert(b2b.finish().toHexLower() ==
+        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
+        "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
     
     BLAKE2s256 b2s;
     b2s.start();
-    assert(b2s.finish() == hexString!
-        ("69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9"));
+    assert(b2s.finish().toHexLower() ==
+        "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
 /// Hasing "abc" using the template API.
 @safe unittest
 {
-    import std.conv : hexString;
-    
     // @safe code enforces type safety
     static immutable ubyte[] abc = [ 'a', 'b', 'c' ];
     
     BLAKE2s256 b2s;
     b2s.put(abc);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
     
     BLAKE2b512 b2b;
     b2b.put(abc);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
 }
@@ -440,10 +437,10 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
 /// Using convenience aliases on "abc".
 @safe unittest
 {
-    assert(blake2b_Of("abc").toHexString!(LetterCase.lower) ==
+    assert(blake2b_Of("abc").toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
-    assert(blake2s_Of("abc").toHexString!(LetterCase.lower) ==
+    assert(blake2s_Of("abc").toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
@@ -451,47 +448,41 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
 /// Using the template API to hash one million 'a'.
 @system unittest
 {
-    import std.conv : hexString;
-    
     ubyte[] onemilliona = new ubyte[1_000_000];
     onemilliona[] = 'a';
     
     BLAKE2b512 b2b;
     b2b.put(onemilliona);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "98fb3efb7206fd19ebf69b6f312cf7b64e3b94dbe1a17107913975a793f177e1"~
         "d077609d7fba363cbba00d05f7aa4e4fa8715d6428104c0a75643b0ff3fd3eaf");
     
     BLAKE2s256 b2s;
     b2s.put(onemilliona);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5");
 }
 
 /// Using the OOP API.
 @system unittest
 {
-    import std.conv : hexString;
-    
     ubyte[] s = ['a', 'b', 'c'];
     
     Digest b2b = new BLAKE2b512Digest();
     b2b.put(s);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     
     Digest b2s = new BLAKE2s256Digest();
     b2s.put(s);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// Template API delegate.
 @system unittest
 {
-    import std.conv : hexString;
-    
     // NOTE: Because the digest is a structure, it must be passed by reference.
     void doSomething(T)(ref T hash)
         if (isDigest!T)
@@ -501,13 +492,13 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2b512 b2b;
     b2b.start();
     doSomething(b2b);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     BLAKE2s256 b2s;
     b2s.start();
     doSomething(b2s);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
@@ -530,7 +521,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     b2b.put([ 'a' ]);
     b2b.put([ 'b' ]);
     b2b.put([ 'c' ]);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     
@@ -538,7 +529,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     b2s.put([ 'a' ]);
     b2s.put([ 'b' ]);
     b2s.put([ 'c' ]);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
@@ -556,14 +547,14 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     assert(input
         .representation
         .hmac!BLAKE2s256(secret)
-        .toHexString!(LetterCase.lower) ==
+        .toHexLower() ==
 	    "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
         "hmac+blake2s256 failed");
     
     assert(input
         .representation
         .hmac!BLAKE2b512(secret)
-        .toHexString!(LetterCase.lower) ==
+        .toHexLower() ==
 	    "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
         "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
@@ -583,14 +574,14 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     assert(input
         .representation
         .hmac!BLAKE2s256(secret)
-        .toHexString!(LetterCase.lower) ==
+        .toHexLower() ==
 	    "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
         "hmac+blake2s256 failed");
     
     assert(input
         .representation
         .hmac!BLAKE2b512(secret)
-        .toHexString!(LetterCase.lower) ==
+        .toHexLower() ==
 	    "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
         "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
@@ -646,7 +637,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2b512 b2b;
     assert(b2b.key(secret2b));
     b2b.put(data);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
         "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
         "BLAKE2b secret failed");
@@ -654,7 +645,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2s256 b2s;
     assert(b2s.key(secret2s));
     b2s.put(data);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
 }
@@ -676,7 +667,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2b512Digest b2b = new BLAKE2b512Digest();
     b2b.key(secret2b);
     b2b.put(data);
-    assert(b2b.finish().toHexString!(LetterCase.lower) ==
+    assert(b2b.finish().toHexLower() ==
         "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
         "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
         "BLAKE2b secret failed");
@@ -684,7 +675,7 @@ public alias BLAKE2s256Digest = WrapperDigestKeyed!BLAKE2s256;
     BLAKE2s256Digest b2s = new BLAKE2s256Digest();
     b2s.key(secret2s);
     b2s.put(data);
-    assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    assert(b2s.finish().toHexLower() ==
         "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
 }
