@@ -7,7 +7,7 @@ module blake2d;
 // NOTE: The Phobos Digest API have no support for keyed hashes.
 
 /// Version string of blake2-d that can be used for printing purposes.
-public enum BLAKE2D_VERSION_STRING = "0.3.0";
+public enum BLAKE2D_VERSION_STRING = "0.3.1";
 
 private import std.digest;
 private import core.bitop : ror;
@@ -38,10 +38,10 @@ private immutable ubyte[16][12] SIGMA = [
 
 /// BLAKE2b IVs
 private immutable ulong[8] B2B_IV = [
-    0x6a09e667f3bcc908, 0xbb67ae8584caa73b,
-    0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
-    0x510e527fade682d1, 0x9b05688c2b3e6c1f,
-    0x1f83d9abfb41bd6b, 0x5be0cd19137e2179
+    0x6a09e667f3bcc908UL, 0xbb67ae8584caa73bUL,
+    0x3c6ef372fe94f82bUL, 0xa54ff53a5f1d36f1UL,
+    0x510e527fade682d1UL, 0x9b05688c2b3e6c1fUL,
+    0x1f83d9abfb41bd6bUL, 0x5be0cd19137e2179UL
 ];
 
 /// BLAKE2s IVs
