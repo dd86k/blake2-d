@@ -138,21 +138,20 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     ///
     /// This is meant to be used after the digest initiation.
     /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
-    /// BLAKE2s.
+    /// BLAKE2s, as specified by RFC 7693.
     ///
-    /// The key is refused if it exceeds the message size, or
+    /// The key is refused if it exceeds the maximum key size, or
     /// when there is already a key or data.
     /// Params: input = Key.
     /// Returns: true if accepted, false if key wasn't accepted.
     bool key(scope const(ubyte)[] input)
     {
-        if (input.length > messageSize)
+        if (input.length > stateSize)
             return false;
         if (status & STATUS_HASDATA)
             return false;
-        
-        enum MASK  = messageSize - 1;
-        h[0] ^= ((input.length & MASK) << 8);
+
+        h[0] ^= (input.length << 8);
         put(input);
         c = messageSize;
         return true;
@@ -592,10 +591,13 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     BLAKE2b512 b2b;
     BLAKE2s256 b2s;
     
-    // Test lengths exceeding acceptable key sizes
+    // Test lengths exceeding acceptable key sizes (RFC 7693: max 32 for
+    // BLAKE2s, max 64 for BLAKE2b). One byte over the limit must be rejected.
+    assert(b2s.key(new ubyte[33]) == false);
+    assert(b2b.key(new ubyte[65]) == false);
     assert(b2s.key(new ubyte[128]) == false);
-    assert(b2s.key(new ubyte[128]) == false);
-    
+    assert(b2b.key(new ubyte[128]) == false);
+
     // Test max-length keys
     assert(b2s.key(new ubyte[32]));
     assert(b2b.key(new ubyte[64]));
