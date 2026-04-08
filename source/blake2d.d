@@ -62,31 +62,41 @@ public alias BLAKE2s256 = BLAKE2s!();
 
 /// BLAKE2b structure template.
 ///
-/// Use this if you wish to set a custom digest size.
-/// It is recommended to use the BLAKE2b512 alias over this.
+/// Use this if you wish to set a custom digest size or bake a key in at
+/// compile-time. It is recommended to use the BLAKE2b512 alias over this.
 ///
 /// Params:
 ///     digestSize = Output digest size in bits. Optional.
-struct BLAKE2b(uint digestSize = 512)
+///     initKey = Optional compile-time key (at most 64 bytes). When set,
+///         the instance starts pre-keyed and the runtime `key()` method is
+///         unavailable. `finish()` leaves the key in place for reuse.
+struct BLAKE2b(uint digestSize = 512, immutable(ubyte)[] initKey = null)
 {
     static assert(digestSize >= 8 && digestSize <= 512,
         "BLAKE2b digest size must be between 8 and 512 bits.");
-    BLAKE2Impl!(ulong, digestSize, B2B_IV, 12, 32, 24, 16, 63) instance;
+    static assert(initKey.length <= 64,
+        "BLAKE2b compile-time key must be at most 64 bytes.");
+    BLAKE2Impl!(ulong, digestSize, B2B_IV, 12, 32, 24, 16, 63, initKey) instance;
     alias instance this;
 }
 
 /// BLAKE2s structure template.
 ///
-/// Use this if you wish to set a custom digest size.
-/// It is recommended to use the BLAKE2s256 alias over this.
+/// Use this if you wish to set a custom digest size or bake a key in at
+/// compile-time. It is recommended to use the BLAKE2s256 alias over this.
 ///
 /// Params:
 ///     digestSize = Output digest size in bits. Optional.
-struct BLAKE2s(uint digestSize = 256)
+///     initKey = Optional compile-time key (at most 32 bytes). When set,
+///         the instance starts pre-keyed and the runtime `key()` method is
+///         unavailable. `finish()` leaves the key in place for reuse.
+struct BLAKE2s(uint digestSize = 256, immutable(ubyte)[] initKey = null)
 {
     static assert(digestSize >= 8 && digestSize <= 256,
         "BLAKE2s digest size must be between 8 and 256 bits.");
-    BLAKE2Impl!(uint, digestSize, B2S_IV, 10, 16, 12, 8, 7) instance;
+    static assert(initKey.length <= 32,
+        "BLAKE2s compile-time key must be at most 32 bytes.");
+    BLAKE2Impl!(uint, digestSize, B2S_IV, 10, 16, 12, 8, 7, initKey) instance;
     alias instance this;
 }
 
@@ -116,11 +126,14 @@ struct BLAKE2s(uint digestSize = 256)
 ///     R1 = R1 value for G function.
 ///     R2 = R2 value for G function.
 ///     R3 = R3 value for G function.
-///     R4 = R4 value for G function. 
+///     R4 = R4 value for G function.
+///     initKey = Optional compile-time key. When non-empty, the instance
+///         starts pre-keyed and the runtime `key()` method is removed.
 ///
 /// Throws: No exceptions are thrown.
 struct BLAKE2Impl(T, uint digestSize, alias iv,
-    size_t ROUNDS, uint R1, uint R2, uint R3, uint R4)
+    size_t ROUNDS, uint R1, uint R2, uint R3, uint R4,
+    immutable(ubyte)[] initKey = null)
 {
 @safe:
 @nogc:
@@ -129,6 +142,8 @@ pure:
 
     static assert(digestSize > 0, "Digest size must be higher than zero.");
     static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
+    static assert(initKey.length <= 8 * T.sizeof,
+        "Compile-time key is larger than the state size.");
 
     /// Internal block size in bits. 1024 for BLAKE2b, 512 for BLAKE2s.
     /// This is what `std.digest.hmac` uses to size the HMAC ipad/opad.
@@ -140,27 +155,37 @@ pure:
         this = typeof(this).init;
     }
 
-    /// Initiates a key with digest.
-    ///
-    /// This is meant to be used after the digest initiation.
-    /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
-    /// BLAKE2s, as specified by RFC 7693.
-    ///
-    /// The key is refused if it exceeds the maximum key size, or
-    /// when there is already a key or data.
-    /// Params: input = Key.
-    /// Returns: true if accepted, false if key wasn't accepted.
-    bool key(scope const(ubyte)[] input)
+    // NOTE: If compile-time key given, remove .key function.
+    //       Because otherwise the state will be corrupted and will produce a wrong hash.
+    //       This static if guard is the most direct and early possible way
+    //       to learn that this not the correct thing to do.
+    static if (initKey.length == 0)
     {
-        if (input.length > stateSize)
-            return false;
-        if (status & STATUS_HASDATA)
-            return false;
+        /// Initiates a key with digest.
+        ///
+        /// This is meant to be used after the digest initiation.
+        /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
+        /// BLAKE2s, as specified by RFC 7693.
+        ///
+        /// The key is refused if it exceeds the maximum key size, or
+        /// when there is already a key or data.
+        ///
+        /// This method is not available when a compile-time key was
+        /// supplied via the `initKey` template parameter.
+        /// Params: input = Key.
+        /// Returns: true if accepted, false if key wasn't accepted.
+        bool key(scope const(ubyte)[] input)
+        {
+            if (input.length > stateSize)
+                return false;
+            if (status & STATUS_HASDATA)
+                return false;
 
-        h[0] ^= (input.length << 8);
-        put(input);
-        c = messageSize;
-        return true;
+            h[0] ^= (input.length << 8);
+            put(input);
+            c = messageSize;
+            return true;
+        }
     }
 
     /// Feed the algorithm with data.
@@ -209,8 +234,10 @@ pure:
     /// Returns the finished hash.
     ///
     /// Per the std.digest convention, this also resets the internal state so
-    /// the instance can be reused for a new digest. Note that a previously
-    /// set key is also cleared. Call key() again if you want a keyed reuse.
+    /// the instance can be reused for a new digest. A runtime-supplied key is
+    /// cleared. Call key() again if you want keyed reuse. A compile-time key
+    /// supplied via the `initKey` template parameter is preserved, so the
+    /// instance is immediately ready for another keyed hash.
     /// Returns: Digest.
     ubyte[digestSizeBytes] finish()
     {
@@ -241,18 +268,42 @@ private:
     /// State size in bytes.
     enum stateSize = 8 * T.sizeof;
 
-    union  // input message buffer
+    static if (initKey.length > 0)
     {
-        size_t[messageSize / size_t.sizeof] mz = void; /// Message (m) as size_t
-        T[16] m; /// Message (m)
-        ubyte[16 * T.sizeof] m8; /// Message (m) as ubyte
+        /// Compile-time zero-padded key block used as the default state of
+        /// the input message buffer when an initKey is supplied. Built with
+        /// an element-wise loop to keep the lambda @nogc under DMD. A slice
+        /// assignment from `initKey[]` gets flagged as a GC allocation.
+        private enum ubyte[16 * T.sizeof] initKeyBlock = ()
+        {
+            ubyte[16 * T.sizeof] b = 0;
+            foreach (i, v; initKey)
+                b[i] = v;
+            return b;
+        }();
+
+        union  // input message buffer (keyed)
+        {
+            ubyte[16 * T.sizeof] m8 = initKeyBlock; /// Message (m) as ubyte
+            T[16] m; /// Message (m)
+            size_t[messageSize / size_t.sizeof] mz; /// Message (m) as size_t
+        }
+    }
+    else
+    {
+        union  // input message buffer
+        {
+            size_t[messageSize / size_t.sizeof] mz = void; /// Message (m) as size_t
+            T[16] m; /// Message (m)
+            ubyte[16 * T.sizeof] m8; /// Message (m) as ubyte
+        }
     }
 
     //           3 2 1 0
     // p[0] = 0x0101kknn
-    // kk - Key size. Set to zero since HMAC is done elsewhere.
+    // kk - Key size. Zero unless a compile-time key was supplied via initKey.
     // nn - Digest size in bytes.
-    enum p0 = 0x0101_0000 ^ digestSizeBytes;
+    enum p0 = 0x0101_0000 ^ digestSizeBytes ^ (cast(uint) initKey.length << 8);
     union  // state
     {
         T[8] h = (iv[0] ^ p0) ~ iv[1 .. $];
@@ -260,7 +311,11 @@ private:
     }
 
     T[2] t; /// Total count of input size (t).
-    size_t c; /// Counter, index for input message.
+    /// Counter, index for input message. When a compile-time key is used,
+    /// the first block is pre-filled with the padded key, so the counter
+    /// starts at messageSize — the next put() will compress the key block
+    /// before accepting any new data.
+    size_t c = initKey.length > 0 ? messageSize : 0;
     T v14 = iv[6]; /// Vector 14. On last block, this turns from IV6 to ~IV6.
 
     int status; /// Internal status flags.
@@ -704,4 +759,121 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     assert(b2s.finish().toHexLower() ==
             "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
+}
+
+/// Keying digests at compile-time using Template API.
+@system unittest
+{
+    import std.string : representation;
+    import std.conv : hexString;
+
+    static immutable ubyte[] secret2b = cast(immutable(ubyte)[]) hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ~
+            "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
+    static immutable ubyte[] secret2s = cast(immutable(ubyte)[]) hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    immutable(ubyte)[] data = hexString!("000102").representation;
+
+    // The compile-time keyed instance must match the same key applied at
+    // run-time — using the official RFC 7693 test vectors.
+    BLAKE2b!(512, secret2b) b2b;
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() ==
+            "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+            "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+        "compile-time keyed BLAKE2b failed");
+
+    BLAKE2s!(256, secret2s) b2s;
+    b2s.put(data);
+    assert(b2s.finish().toHexLower() ==
+            "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+        "compile-time keyed BLAKE2s failed");
+}
+
+/// Compile-time keyed instances must be reusable: after finish() the state
+/// resets to the keyed init, not to the unkeyed init.
+@system unittest
+{
+    import std.string : representation;
+    import std.conv : hexString;
+
+    static immutable ubyte[] secret2b = cast(immutable(ubyte)[]) hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ~
+            "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
+    immutable(ubyte)[] data = hexString!("000102").representation;
+    enum expected =
+        "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1";
+
+    BLAKE2b!(512, secret2b) b2b;
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() == expected);
+    // No explicit start() — the key must still be in effect.
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() == expected);
+
+    // Explicit start() must also preserve the compile-time key.
+    b2b.start();
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() == expected);
+}
+
+/// The runtime key() method is not available on compile-time keyed instances,
+/// and the compile-time key does not affect the blockSize constant.
+@safe unittest
+{
+    static immutable ubyte[] k = [0x01, 0x02, 0x03];
+    alias KeyedB2b = BLAKE2b!(512, k);
+    alias KeyedB2s = BLAKE2s!(256, k);
+
+    static assert(!__traits(compiles, { KeyedB2b x; x.key([]); }));
+    static assert(!__traits(compiles, { KeyedB2s x; x.key([]); }));
+
+    static assert(KeyedB2b.blockSize == BLAKE2b512.blockSize);
+    static assert(KeyedB2s.blockSize == BLAKE2s256.blockSize);
+}
+
+/// Keying digests at compile-time using OOP API.
+///
+/// Since the key is baked into the underlying struct's init state,
+/// `std.digest.WrapperDigest` is sufficient — no runtime key() method
+/// is needed.
+@system unittest
+{
+    import std.string : representation;
+    import std.conv : hexString;
+
+    static immutable ubyte[] secret2b = cast(immutable(ubyte)[]) hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ~
+            "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
+    static immutable ubyte[] secret2s = cast(immutable(ubyte)[]) hexString!(
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    auto data = hexString!("000102").representation;
+
+    alias KeyedBLAKE2b512 = BLAKE2b!(512, secret2b);
+    alias KeyedBLAKE2s256 = BLAKE2s!(256, secret2s);
+    alias KeyedBLAKE2b512Digest = WrapperDigest!KeyedBLAKE2b512;
+    alias KeyedBLAKE2s256Digest = WrapperDigest!KeyedBLAKE2s256;
+
+    Digest b2b = new KeyedBLAKE2b512Digest();
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() ==
+            "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+            "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+        "compile-time keyed BLAKE2b (OOP) failed");
+
+    // And reuse must work — reset() on WrapperDigest calls the underlying
+    // struct's start(), which keeps the compile-time key in place.
+    b2b.reset();
+    b2b.put(data);
+    assert(b2b.finish().toHexLower() ==
+            "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+            "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+        "compile-time keyed BLAKE2b (OOP) reuse failed");
+
+    Digest b2s = new KeyedBLAKE2s256Digest();
+    b2s.put(data);
+    assert(b2s.finish().toHexLower() ==
+            "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+        "compile-time keyed BLAKE2s (OOP) failed");
 }
