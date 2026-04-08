@@ -126,7 +126,9 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     static assert(digestSize > 0, "Digest size must higher than zero.");
     static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
     
-    enum blockSize = digestSize;    /// Digest size in bits.
+    /// Internal block size in bits. 1024 for BLAKE2b, 512 for BLAKE2s.
+    /// This is what `std.digest.hmac` uses to size the HMAC ipad/opad.
+    enum blockSize = messageSize * 8;
     
     /// Initiate or reset the state of the instance.
     void start()
@@ -522,32 +524,32 @@ private alias toHexLower = toHexString!(LetterCase.lower);
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
-/// Test with HMAC
-/+@system unittest
+/// Test with std.digest.hmac. Note: keyed BLAKE2 is the preferred MAC per
+/// RFC 7693 §2.9, but HMAC-BLAKE2 works too and is useful for interop.
+@system unittest
 {
-    import std.ascii : LetterCase;
     import std.string : representation;
     import std.digest.hmac : hmac;
-    
+
     immutable string input =
         "The quick brown fox jumps over the lazy dog";
     auto secret = "secret".representation;
-    
+
     assert(input
         .representation
         .hmac!BLAKE2s256(secret)
         .toHexLower() ==
-	    "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
+        "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
         "hmac+blake2s256 failed");
-    
+
     assert(input
         .representation
         .hmac!BLAKE2b512(secret)
         .toHexLower() ==
-	    "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
+        "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
         "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
-}+/
+}
 
 /// Keying digests at run-time using Template API.
 /+@system unittest
@@ -610,13 +612,10 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 /// Keying digests at run-time using Template API.
 @system unittest
 {
-    // NOTE: This implementation is not yet compatible with the hmac/HMAC
-    //       templates at the moment.
-    
     import std.ascii : LetterCase;
     import std.string : representation;
     import std.conv : hexString;
-    
+
     auto secret2b = hexString!(
         "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"~
         "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
