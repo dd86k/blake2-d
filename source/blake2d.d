@@ -127,7 +127,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
 nothrow:
 pure:
 
-    static assert(digestSize > 0, "Digest size must higher than zero.");
+    static assert(digestSize > 0, "Digest size must be higher than zero.");
     static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
 
     /// Internal block size in bits. 1024 for BLAKE2b, 512 for BLAKE2s.
@@ -332,14 +332,14 @@ private:
     }
 }
 
-/// Convience alias using the BLAKE2b-512 implementation.
+/// Convenience alias using the BLAKE2b-512 implementation.
 auto blake2b_Of(T...)(T data)
 {
     return digest!(BLAKE2b512, T)(data);
 }
 /// Alias of blake2b_Of. Since "BLAKE2" refers to BLAKE2b.
 alias blake2_Of = blake2b_Of;
-/// Convience alias using the BLAKE2s-256 implementation.
+/// Convenience alias using the BLAKE2s-256 implementation.
 auto blake2s_Of(T...)(T data)
 {
     return digest!(BLAKE2s256, T)(data);
@@ -348,11 +348,15 @@ auto blake2s_Of(T...)(T data)
 /// Adds keyed to digest.
 class WrapperDigestKeyed(T) if (isDigest!T) : WrapperDigest!T
 {
-    /// Initiates a key with digest.
-    /// This is meant to be used after the digest initiation.
-    /// The key limit is 64 bytes for BLAKE2b and 32 bytes for
-    /// BLAKE2s. If the limit is reached, it fails silenty by truncating
-    /// key data.
+    /// Initiates a key with the digest.
+    ///
+    /// This is meant to be used right after construction, before any data
+    /// has been fed. The key limit is 64 bytes for BLAKE2b and 32 bytes for
+    /// BLAKE2s, as specified by RFC 7693.
+    ///
+    /// Throws: `Exception` if the underlying digest refuses the key — that
+    /// is, if the key exceeds the maximum size, or if data has already been
+    /// put() into the digest.
     /// Params: input = Key.
     @trusted void key(scope const(ubyte)[] input)
     {
@@ -384,7 +388,7 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     assert(hasBlockSize!BLAKE2s256);
 }
 
-/// Default alises digest length in Bytes.
+/// Default aliases digest length in bytes.
 @safe unittest
 {
     assert(digestLength!BLAKE2b512 == 64);
@@ -418,7 +422,7 @@ private alias toHexLower = toHexString!(LetterCase.lower);
             "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
-/// Hasing "abc" using the template API.
+/// Hashing "abc" using the template API.
 @safe unittest
 {
     // @safe code enforces type safety
@@ -607,33 +611,6 @@ private alias toHexLower = toHexString!(LetterCase.lower);
             "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
 }
-
-/// Keying digests at run-time using Template API.
-/+@system unittest
-{
-    import std.ascii : LetterCase;
-    import std.string : representation;
-    import std.digest.hmac : hmac;
-    
-    immutable string input =
-        "The quick brown fox jumps over the lazy dog";
-    auto secret = "secret".representation;
-    
-    assert(input
-        .representation
-        .hmac!BLAKE2s256(secret)
-        .toHexLower() ==
-	    "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
-        "hmac+blake2s256 failed");
-    
-    assert(input
-        .representation
-        .hmac!BLAKE2b512(secret)
-        .toHexLower() ==
-	    "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
-        "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
-        "hmac+blake2b512 failed");
-}+/
 
 /// Edge cases with keying
 @safe unittest
