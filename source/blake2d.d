@@ -201,6 +201,10 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     }
     
     /// Returns the finished hash.
+    ///
+    /// Per the std.digest convention, this also resets the internal state so
+    /// the instance can be reused for a new digest. Note that a previously
+    /// set key is also cleared. Call key() again if you want a keyed reuse.
     /// Returns: Digest.
     ubyte[digestSizeBytes] finish()
     {
@@ -213,12 +217,13 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
         v14 = ~iv[6];
         compress;
         
-        // Clear out possible sensitive data
-        t[0] = t[1] = c = 0; // clear size information
-        mz[] = 0; // clear input message buffer
-        h8[digestSizeBytes..$] = 0; // clear unused state space
-        
-        return h8[0..digestSizeBytes];
+        // Copy out digest, then reset the whole state. start() clears t, c,
+        // mz, h, v14 and status. This is important because the old code left
+        // v14 = ~iv[6] behind, so a subsequent put()/finish() without an
+        // explicit start() produced a garbage hash.
+        ubyte[digestSizeBytes] result = h8[0..digestSizeBytes];
+        start();
+        return result;
     }
     
 private:
@@ -515,13 +520,45 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     assert(b2b.finish().toHexLower() ==
         "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
-    
+
     BLAKE2s256 b2s;
     b2s.put([ 'a' ]);
     b2s.put([ 'b' ]);
     b2s.put([ 'c' ]);
     assert(b2s.finish().toHexLower() ==
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+}
+
+/// finish() must leave the instance ready for reuse — hashing the same
+/// input twice on the same struct must give the same digest as two
+/// fresh instances.
+@safe unittest
+{
+    enum abcB2b =
+        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923";
+    enum abcB2s =
+        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982";
+
+    BLAKE2b512 b2b;
+    b2b.put([ 'a', 'b', 'c' ]);
+    assert(b2b.finish().toHexLower() == abcB2b);
+    // No start() call — finish() must have reset us.
+    b2b.put([ 'a', 'b', 'c' ]);
+    assert(b2b.finish().toHexLower() == abcB2b);
+
+    BLAKE2s256 b2s;
+    b2s.put([ 'a', 'b', 'c' ]);
+    assert(b2s.finish().toHexLower() == abcB2s);
+    b2s.put([ 'a', 'b', 'c' ]);
+    assert(b2s.finish().toHexLower() == abcB2s);
+
+    // An empty finish() followed by normal use must also work — this
+    // exercises the v14 reset, which was the specific bug.
+    BLAKE2b512 b2b2;
+    b2b2.finish();
+    b2b2.put([ 'a', 'b', 'c' ]);
+    assert(b2b2.finish().toHexLower() == abcB2b);
 }
 
 /// Test with std.digest.hmac. Note: keyed BLAKE2 is the preferred MAC per
