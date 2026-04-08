@@ -8,21 +8,23 @@ The BLAKE2 algorithm was introduced in 2015 as IETF RFC 7693. You can visit
 
     ⚠️ Not yet audited by a cryptography expert.
     
-    Tests are performed against output of other reputable tools.
+    Tests are performed against output of other reputable tools and
+    official vectors.
 
 Features (so far):
 
 - [x] Supports BLAKE2b and BLAKE2s.
 - [x] Custom digest sizes.
+- [x] Supports HMAC.
 - [x] Keying at runtime (Template API).
 - [x] Keying at runtime (OOP API).
-- [ ] Keying at compile-time (Template API).
-- [ ] Keying at compile-time (OOP API).
+- [x] Keying at compile-time (Template API).
+- [x] Keying at compile-time (OOP API).
 - [ ] Support for BLAKE2bp and BLAKE2sp.
 
 Notes:
-- May be incompatible with HMAC.
 - BLAKE2X was never finished, so it is not implemented (including XOF).
+- BigEndian support untested.
 
 Compatible and tested with DMD, GDC, and LDC.
 
@@ -109,6 +111,33 @@ b2s.put(data);
 
 assert(b2s.finish().toHexString!(LetterCase.lower) ==
     "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b");
+```
+
+A key can also be baked in at compile-time via the second template
+parameter on `BLAKE2b` / `BLAKE2s`. The compile-time path starts the state
+pre-keyed, removes the runtime `key()` method, and preserves the key across
+`finish()` so the instance is immediately ready for reuse.
+
+```d
+import std.conv : hexString;
+
+static immutable ubyte[] secret = cast(immutable(ubyte)[]) hexString!(
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+
+// Template API
+BLAKE2s!(256, secret) b2s;
+b2s.put(cast(ubyte[]) hexString!("000102"));
+assert(b2s.finish().toHexString!(LetterCase.lower) ==
+    "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b");
+
+// OOP API — wrap the keyed alias in std.digest.WrapperDigest.
+alias KeyedBLAKE2s256 = BLAKE2s!(256, secret);
+alias KeyedBLAKE2s256Digest = WrapperDigest!KeyedBLAKE2s256;
+
+Digest dgst = new KeyedBLAKE2s256Digest();
+dgst.put(cast(ubyte[]) hexString!("000102"));
+assert(dgst.finish() == cast(ubyte[]) hexString!(
+    "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b"));
 ```
 
 # License
