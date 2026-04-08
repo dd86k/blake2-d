@@ -13,7 +13,8 @@ private import std.digest;
 private import core.bitop : ror;
 
 // Private status flags for enforcing behavior
-private enum {
+private enum
+{
     /// Has data or key, used in key function only.
     STATUS_HASDATA = 1,
 }
@@ -22,18 +23,18 @@ private enum {
 // SIGMA[10..11] = SIGMA[0..1]."
 /// Sigma scheduling.
 private immutable ubyte[16][12] SIGMA = [
-    [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, ],
-    [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
-    [ 11, 8,  12, 0,  5,  2,  15, 13, 10, 14, 3,  6,  7,  1,  9,  4,  ],
-    [ 7,  9,  3,  1,  13, 12, 11, 14, 2,  6,  5,  10, 4,  0,  15, 8,  ],
-    [ 9,  0,  5,  7,  2,  4,  10, 15, 14, 1,  11, 12, 6,  8,  3,  13, ],
-    [ 2,  12, 6,  10, 0,  11, 8,  3,  4,  13, 7,  5,  15, 14, 1,  9,  ],
-    [ 12, 5,  1,  15, 14, 13, 4,  10, 0,  7,  6,  3,  9,  2,  8,  11, ],
-    [ 13, 11, 7,  14, 12, 1,  3,  9,  5,  0,  15, 4,  8,  6,  2,  10, ],
-    [ 6,  15, 14, 9,  11, 3,  0,  8,  12, 2,  13, 7,  1,  4,  10, 5,  ],
-    [ 10, 2,  8,  4,  7,  6,  1,  5,  15, 11, 9,  14, 3,  12, 13, 0,  ],
-    [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, ],
-    [ 14, 10, 4,  8,  9,  15, 13, 6,  1,  12, 0,  2,  11, 7,  5,  3,  ],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,],
+    [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3,],
+    [11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4,],
+    [7, 9, 3, 1, 13, 12, 11, 14, 2, 6, 5, 10, 4, 0, 15, 8,],
+    [9, 0, 5, 7, 2, 4, 10, 15, 14, 1, 11, 12, 6, 8, 3, 13,],
+    [2, 12, 6, 10, 0, 11, 8, 3, 4, 13, 7, 5, 15, 14, 1, 9,],
+    [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11,],
+    [13, 11, 7, 14, 12, 1, 3, 9, 5, 0, 15, 4, 8, 6, 2, 10,],
+    [6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5,],
+    [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0,],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,],
+    [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3,],
 ];
 
 /// BLAKE2b IVs
@@ -121,21 +122,24 @@ struct BLAKE2s(uint digestSize = 256)
 struct BLAKE2Impl(T, uint digestSize, alias iv,
     size_t ROUNDS, uint R1, uint R2, uint R3, uint R4)
 {
-    @safe: @nogc: nothrow: pure:
-    
+@safe:
+@nogc:
+nothrow:
+pure:
+
     static assert(digestSize > 0, "Digest size must higher than zero.");
     static assert(digestSize % 8 == 0, "Digest size must be divisible by 8.");
-    
+
     /// Internal block size in bits. 1024 for BLAKE2b, 512 for BLAKE2s.
     /// This is what `std.digest.hmac` uses to size the HMAC ipad/opad.
     enum blockSize = messageSize * 8;
-    
+
     /// Initiate or reset the state of the instance.
     void start()
     {
         this = typeof(this).init;
     }
-    
+
     /// Initiates a key with digest.
     ///
     /// This is meant to be used after the digest initiation.
@@ -158,7 +162,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
         c = messageSize;
         return true;
     }
-    
+
     /// Feed the algorithm with data.
     ///
     /// Also implements the $(REF isOutputRange, std,range,primitives)
@@ -167,7 +171,7 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     void put(scope const(ubyte)[] input...) @trusted
     {
         status |= STATUS_HASDATA;
-        
+
         // Process wordwise if properly aligned.
         if ((c | cast(size_t) input.ptr) % size_t.alignof == 0)
         {
@@ -176,7 +180,8 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
                 if (c >= messageSize)
                 {
                     t[0] += c;
-                    if (t[0] < c) ++t[1]; // Overflow
+                    if (t[0] < c)
+                        ++t[1]; // Overflow
                     compress;
                     c = 0;
                 }
@@ -185,21 +190,22 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
             }
             input = input.ptr[input.length - (input.length % size_t.sizeof) .. input.length];
         }
-        
+
         // Process remainder bytewise.
         foreach (const i; input)
         {
             if (c >= messageSize)
             {
                 t[0] += c;
-                if (t[0] < c) ++t[1]; // Overflow
+                if (t[0] < c)
+                    ++t[1]; // Overflow
                 compress;
                 c = 0;
             }
             m8[c++] = i;
         }
     }
-    
+
     /// Returns the finished hash.
     ///
     /// Per the std.digest convention, this also resets the internal state so
@@ -210,22 +216,23 @@ struct BLAKE2Impl(T, uint digestSize, alias iv,
     {
         // Final counter update
         t[0] += c;
-        if (t[0] < c) ++t[1];
-        
+        if (t[0] < c)
+            ++t[1];
+
         // Zero-pad message buffer
-        m8[c..$] = 0;
+        m8[c .. $] = 0;
         v14 = ~iv[6];
         compress;
-        
+
         // Copy out digest, then reset the whole state. start() clears t, c,
         // mz, h, v14 and status. This is important because the old code left
         // v14 = ~iv[6] behind, so a subsequent put()/finish() without an
         // explicit start() produced a garbage hash.
-        ubyte[digestSizeBytes] result = h8[0..digestSizeBytes];
+        ubyte[digestSizeBytes] result = h8[0 .. digestSizeBytes];
         start();
         return result;
     }
-    
+
 private:
     /// Digest size in bytes, as digestSize is in bits.
     enum digestSizeBytes = digestSize / 8;
@@ -233,35 +240,35 @@ private:
     enum messageSize = 16 * T.sizeof;
     /// State size in bytes.
     enum stateSize = 8 * T.sizeof;
-    
-    union // input message buffer
+
+    union  // input message buffer
     {
         size_t[messageSize / size_t.sizeof] mz = void; /// Message (m) as size_t
-        T[16] m;   /// Message (m)
+        T[16] m; /// Message (m)
         ubyte[16 * T.sizeof] m8; /// Message (m) as ubyte
     }
-    
+
     //           3 2 1 0
     // p[0] = 0x0101kknn
     // kk - Key size. Set to zero since HMAC is done elsewhere.
     // nn - Digest size in bytes.
     enum p0 = 0x0101_0000 ^ digestSizeBytes;
-    union // state
+    union  // state
     {
-        T[8] h = (iv[0] ^ p0) ~ iv[1..$];
-        ubyte[stateSize] h8;   /// State in byte-size
+        T[8] h = (iv[0] ^ p0) ~ iv[1 .. $];
+        ubyte[stateSize] h8; /// State in byte-size
     }
-    
-    T[2] t;         /// Total count of input size (t).
-    size_t c;       /// Counter, index for input message.
-    T v14 = iv[6];  /// Vector 14. On last block, this turns from IV6 to ~IV6.
-    
-    int status;     /// Internal status flags.
-    
+
+    T[2] t; /// Total count of input size (t).
+    size_t c; /// Counter, index for input message.
+    T v14 = iv[6]; /// Vector 14. On last block, this turns from IV6 to ~IV6.
+
+    int status; /// Internal status flags.
+
     void compress() @trusted
     {
         // TODO: bswap message or vectors on BigEndian platforms?
-        
+
         T[16] v = [
             h[0],
             h[1],
@@ -280,26 +287,26 @@ private:
             v14,
             iv[7],
         ];
-        
+
         // Assert i=0 v[16]
-        
+
         for (size_t round; round < ROUNDS; ++round)
         {
-            immutable(ubyte) *sigma = SIGMA[round].ptr;
-            
+            immutable(ubyte)* sigma = SIGMA[round].ptr;
+
             //   a  b   c   d  x             y
-            G(v, 0, 4,  8, 12, m[sigma[ 0]], m[sigma[ 1]]);
-            G(v, 1, 5,  9, 13, m[sigma[ 2]], m[sigma[ 3]]);
-            G(v, 2, 6, 10, 14, m[sigma[ 4]], m[sigma[ 5]]);
-            G(v, 3, 7, 11, 15, m[sigma[ 6]], m[sigma[ 7]]);
-            G(v, 0, 5, 10, 15, m[sigma[ 8]], m[sigma[ 9]]);
+            G(v, 0, 4, 8, 12, m[sigma[0]], m[sigma[1]]);
+            G(v, 1, 5, 9, 13, m[sigma[2]], m[sigma[3]]);
+            G(v, 2, 6, 10, 14, m[sigma[4]], m[sigma[5]]);
+            G(v, 3, 7, 11, 15, m[sigma[6]], m[sigma[7]]);
+            G(v, 0, 5, 10, 15, m[sigma[8]], m[sigma[9]]);
             G(v, 1, 6, 11, 12, m[sigma[10]], m[sigma[11]]);
-            G(v, 2, 7,  8, 13, m[sigma[12]], m[sigma[13]]);
-            G(v, 3, 4,  9, 14, m[sigma[14]], m[sigma[15]]);
-            
+            G(v, 2, 7, 8, 13, m[sigma[12]], m[sigma[13]]);
+            G(v, 3, 4, 9, 14, m[sigma[14]], m[sigma[15]]);
+
             // Assert i=1..i=10/12 v[16]
         }
-        
+
         h[0] ^= v[0] ^ v[8];
         h[1] ^= v[1] ^ v[9];
         h[2] ^= v[2] ^ v[10];
@@ -308,10 +315,10 @@ private:
         h[5] ^= v[5] ^ v[13];
         h[6] ^= v[6] ^ v[14];
         h[7] ^= v[7] ^ v[15];
-        
+
         // Assert h[8]
     }
-    
+
     static void G(ref T[16] v, uint a, uint b, uint c, uint d, T x, T y)
     {
         v[a] = v[a] + v[b] + x;
@@ -326,11 +333,17 @@ private:
 }
 
 /// Convience alias using the BLAKE2b-512 implementation.
-auto blake2b_Of(T...)(T data) { return digest!(BLAKE2b512, T)(data); }
+auto blake2b_Of(T...)(T data)
+{
+    return digest!(BLAKE2b512, T)(data);
+}
 /// Alias of blake2b_Of. Since "BLAKE2" refers to BLAKE2b.
 alias blake2_Of = blake2b_Of;
 /// Convience alias using the BLAKE2s-256 implementation.
-auto blake2s_Of(T...)(T data) { return digest!(BLAKE2s256, T)(data); }
+auto blake2s_Of(T...)(T data)
+{
+    return digest!(BLAKE2s256, T)(data);
+}
 
 /// Adds keyed to digest.
 class WrapperDigestKeyed(T) if (isDigest!T) : WrapperDigest!T
@@ -344,6 +357,7 @@ class WrapperDigestKeyed(T) if (isDigest!T) : WrapperDigest!T
     @trusted void key(scope const(ubyte)[] input)
     {
         import std.exception : enforce;
+
         enforce(_digest.key(input), "Key was not accepted");
     }
 }
@@ -381,10 +395,11 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 @safe unittest
 {
     assert(blake2b_Of("").toHexLower() ==
-        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
-        "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
-    assert(blake2s_Of("").toHexLower() ==
-        "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
+            "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419" ~
+            "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+    assert(blake2s_Of("")
+            .toHexLower() ==
+            "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
 /// No input.
@@ -393,39 +408,40 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     BLAKE2b512 b2b;
     b2b.start();
     assert(b2b.finish().toHexLower() ==
-        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419"~
-        "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
-    
+            "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419" ~
+            "d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+
     BLAKE2s256 b2s;
     b2s.start();
-    assert(b2s.finish().toHexLower() ==
-        "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
+    assert(b2s.finish()
+            .toHexLower() ==
+            "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
 }
 
 /// Hasing "abc" using the template API.
 @safe unittest
 {
     // @safe code enforces type safety
-    static immutable ubyte[] abc = [ 'a', 'b', 'c' ];
-    
+    static immutable ubyte[] abc = ['a', 'b', 'c'];
+
     BLAKE2s256 b2s;
     b2s.put(abc);
-    assert(b2s.finish().toHexLower() ==
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
-    
+    assert(b2s.finish()
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+
     BLAKE2b512 b2b;
     b2b.put(abc);
     assert(b2b.finish().toHexLower() ==
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
 }
-
 
 /// Using digest template.
 @safe unittest
 {
     enum TEXT = "abc";
-    
+
     assert(blake2b_Of(TEXT) == digest!BLAKE2b512(TEXT));
     assert(blake2s_Of(TEXT) == digest!BLAKE2s256(TEXT));
 }
@@ -434,68 +450,71 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 @safe unittest
 {
     assert(blake2b_Of("abc").toHexLower() ==
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
-    assert(blake2s_Of("abc").toHexLower() ==
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+    assert(blake2s_Of("abc")
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
-
 
 /// Using the template API to hash one million 'a'.
 @system unittest
 {
     ubyte[] onemilliona = new ubyte[1_000_000];
     onemilliona[] = 'a';
-    
+
     BLAKE2b512 b2b;
     b2b.put(onemilliona);
     assert(b2b.finish().toHexLower() ==
-        "98fb3efb7206fd19ebf69b6f312cf7b64e3b94dbe1a17107913975a793f177e1"~
-        "d077609d7fba363cbba00d05f7aa4e4fa8715d6428104c0a75643b0ff3fd3eaf");
-    
+            "98fb3efb7206fd19ebf69b6f312cf7b64e3b94dbe1a17107913975a793f177e1" ~
+            "d077609d7fba363cbba00d05f7aa4e4fa8715d6428104c0a75643b0ff3fd3eaf");
+
     BLAKE2s256 b2s;
     b2s.put(onemilliona);
-    assert(b2s.finish().toHexLower() ==
-        "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5");
+    assert(b2s.finish()
+            .toHexLower() ==
+            "bec0c0e6cde5b67acb73b81f79a67a4079ae1c60dac9d2661af18e9f8b50dfa5");
 }
 
 /// Using the OOP API.
 @system unittest
 {
     ubyte[] s = ['a', 'b', 'c'];
-    
+
     Digest b2b = new BLAKE2b512Digest();
     b2b.put(s);
     assert(b2b.finish().toHexLower() ==
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
-    
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+
     Digest b2s = new BLAKE2s256Digest();
     b2s.put(s);
-    assert(b2s.finish().toHexLower() ==
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+    assert(b2s.finish()
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// Template API delegate.
 @system unittest
 {
     // NOTE: Because the digest is a structure, it must be passed by reference.
-    void doSomething(T)(ref T hash)
-        if (isDigest!T)
-        {
-            hash.put([ 'a', 'b', 'c' ]);
-        }
+    void doSomething(T)(ref T hash) if (isDigest!T)
+    {
+        hash.put(['a', 'b', 'c']);
+    }
+
     BLAKE2b512 b2b;
     b2b.start();
     doSomething(b2b);
     assert(b2b.finish().toHexLower() ==
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     BLAKE2s256 b2s;
     b2s.start();
     doSomething(b2s);
-    assert(b2s.finish().toHexLower() ==
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+    assert(b2s.finish()
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// Test minimum digest size.
@@ -504,7 +523,7 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     BLAKE2b!8 b2b;
     b2b.start();
     assert(b2b.finish().length == 1);
-    
+
     BLAKE2s!8 b2s;
     b2s.start();
     assert(b2s.finish().length == 1);
@@ -514,19 +533,20 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 @safe unittest
 {
     BLAKE2b512 b2b;
-    b2b.put([ 'a' ]);
-    b2b.put([ 'b' ]);
-    b2b.put([ 'c' ]);
+    b2b.put(['a']);
+    b2b.put(['b']);
+    b2b.put(['c']);
     assert(b2b.finish().toHexLower() ==
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
-        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
 
     BLAKE2s256 b2s;
-    b2s.put([ 'a' ]);
-    b2s.put([ 'b' ]);
-    b2s.put([ 'c' ]);
-    assert(b2s.finish().toHexLower() ==
-        "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+    b2s.put(['a']);
+    b2s.put(['b']);
+    b2s.put(['c']);
+    assert(b2s.finish()
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
 }
 
 /// finish() must leave the instance ready for reuse — hashing the same
@@ -535,29 +555,29 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 @safe unittest
 {
     enum abcB2b =
-        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"~
+        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
         "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923";
     enum abcB2s =
         "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982";
 
     BLAKE2b512 b2b;
-    b2b.put([ 'a', 'b', 'c' ]);
+    b2b.put(['a', 'b', 'c']);
     assert(b2b.finish().toHexLower() == abcB2b);
     // No start() call — finish() must have reset us.
-    b2b.put([ 'a', 'b', 'c' ]);
+    b2b.put(['a', 'b', 'c']);
     assert(b2b.finish().toHexLower() == abcB2b);
 
     BLAKE2s256 b2s;
-    b2s.put([ 'a', 'b', 'c' ]);
+    b2s.put(['a', 'b', 'c']);
     assert(b2s.finish().toHexLower() == abcB2s);
-    b2s.put([ 'a', 'b', 'c' ]);
+    b2s.put(['a', 'b', 'c']);
     assert(b2s.finish().toHexLower() == abcB2s);
 
     // An empty finish() followed by normal use must also work — this
     // exercises the v14 reset, which was the specific bug.
     BLAKE2b512 b2b2;
     b2b2.finish();
-    b2b2.put([ 'a', 'b', 'c' ]);
+    b2b2.put(['a', 'b', 'c']);
     assert(b2b2.finish().toHexLower() == abcB2b);
 }
 
@@ -573,18 +593,18 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     auto secret = "secret".representation;
 
     assert(input
-        .representation
-        .hmac!BLAKE2s256(secret)
-        .toHexLower() ==
-        "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
+            .representation
+            .hmac!BLAKE2s256(secret)
+            .toHexLower() ==
+            "e95b806f87e9477966cd5f0ca2d496bfdfa424c69e820d33e4f1007aeb6c9de1",
         "hmac+blake2s256 failed");
 
     assert(input
-        .representation
-        .hmac!BLAKE2b512(secret)
-        .toHexLower() ==
-        "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3"~
-        "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
+            .representation
+            .hmac!BLAKE2b512(secret)
+            .toHexLower() ==
+            "97504d0493aaaa40b08cf700fd380f17fe32e26e008fa20f9f3f04901d9f5bf3" ~
+            "3e826ea234f93bedfe7c5c50a540ad61454eb011581194cd68bff57938760ae0",
         "hmac+blake2b512 failed");
 }
 
@@ -620,16 +640,17 @@ private alias toHexLower = toHexString!(LetterCase.lower);
 {
     BLAKE2b512 b2b;
     BLAKE2s256 b2s;
-    
+
     // RFC allows zero-length keys
     assert(b2s.key([]));
     assert(b2b.key([]));
 }
+
 @safe unittest
 {
     BLAKE2b512 b2b;
     BLAKE2s256 b2s;
-    
+
     // Test lengths exceeding acceptable key sizes (RFC 7693: max 32 for
     // BLAKE2s, max 64 for BLAKE2b). One byte over the limit must be rejected.
     assert(b2s.key(new ubyte[33]) == false);
@@ -640,7 +661,7 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     // Test max-length keys
     assert(b2s.key(new ubyte[32]));
     assert(b2b.key(new ubyte[64]));
-    
+
     // Cannot key again or key after data
     assert(b2s.key([]) == false);
     assert(b2b.key([]) == false);
@@ -654,27 +675,27 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     import std.conv : hexString;
 
     auto secret2b = hexString!(
-        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"~
-        "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ~
+            "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
         .representation;
     auto secret2s = hexString!(
         "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
         .representation;
     immutable(ubyte)[] data = hexString!("000102").representation;
-    
+
     BLAKE2b512 b2b;
     assert(b2b.key(secret2b));
     b2b.put(data);
     assert(b2b.finish().toHexLower() ==
-        "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
-        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+            "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+            "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
         "BLAKE2b secret failed");
-    
+
     BLAKE2s256 b2s;
     assert(b2s.key(secret2s));
     b2s.put(data);
     assert(b2s.finish().toHexLower() ==
-        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+            "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
 }
 
@@ -684,26 +705,26 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     import std.ascii : LetterCase;
     import std.string : representation;
     import std.conv : hexString;
-    
-    enum secret2b = cast(ubyte[])hexString!(
-        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"~
-        "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
-    enum secret2s = cast(ubyte[])hexString!(
-        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+
+    enum secret2b = cast(ubyte[]) hexString!(
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" ~
+                "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f");
+    enum secret2s = cast(ubyte[]) hexString!(
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
     auto data = hexString!("000102").representation;
-    
+
     BLAKE2b512Digest b2b = new BLAKE2b512Digest();
     b2b.key(secret2b);
     b2b.put(data);
     assert(b2b.finish().toHexLower() ==
-        "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5"~
-        "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
+            "33d0825dddf7ada99b0e7e307104ad07ca9cfd9692214f1561356315e784f3e5" ~
+            "a17e364ae9dbb14cb2036df932b77f4b292761365fb328de7afdc6d8998f5fc1",
         "BLAKE2b secret failed");
-    
+
     BLAKE2s256Digest b2s = new BLAKE2s256Digest();
     b2s.key(secret2s);
     b2s.put(data);
     assert(b2s.finish().toHexLower() ==
-        "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
+            "1d220dbe2ee134661fdf6d9e74b41704710556f2f6e5a091b227697445dbea6b",
         "BLAKE2s secret failed");
 }
