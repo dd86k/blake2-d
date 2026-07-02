@@ -181,7 +181,18 @@ pure:
             if (status & STATUS_HASDATA)
                 return false;
 
+            // RFC 7693: kk=0 is unkeyed hashing, so no key block is
+            // processed and the digest must match the unkeyed one.
+            if (input.length == 0)
+            {
+                status |= STATUS_HASDATA;
+                return true;
+            }
+
             h[0] ^= (input.length << 8);
+            // The key block must be zero-padded to a full message block,
+            // and the buffer is void-initialized, so clear it first.
+            m8[0 .. $] = 0;
             put(input);
             c = messageSize;
             return true;
@@ -676,6 +687,60 @@ private alias toHexLower = toHexString!(LetterCase.lower);
     // RFC allows zero-length keys
     assert(b2s.key([]));
     assert(b2b.key([]));
+}
+
+/// A zero-length key means unkeyed hashing (RFC 7693: kk=0), so the digest
+/// must match the unkeyed digest instead of processing a bogus key block.
+@safe unittest
+{
+    static immutable ubyte[] abc = ['a', 'b', 'c'];
+
+    BLAKE2b512 b2b;
+    assert(b2b.key([]));
+    b2b.put(abc);
+    assert(b2b.finish().toHexLower() ==
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1" ~
+            "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+
+    BLAKE2s256 b2s;
+    assert(b2s.key([]));
+    b2s.put(abc);
+    assert(b2s.finish()
+            .toHexLower() ==
+            "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+}
+
+/// Keys shorter than a message block must be zero-padded to a full block.
+/// The RFC 7693 vectors only cover block-sized keys, so this uses vectors
+/// generated with OpenSSL (BLAKE2BMAC/BLAKE2SMAC, key 010203, data "abc"),
+/// and cross-checks the compile-time key path against the same vectors.
+@safe unittest
+{
+    static immutable ubyte[] shortKey = [0x01, 0x02, 0x03];
+    static immutable ubyte[] abc = ['a', 'b', 'c'];
+    enum shortKeyB2b =
+        "2188de51ffa3c6019f7f0e9eca7c83464f08156e486ed27594b44cd4ec35d500" ~
+        "d1de50b142348903bae22578a8852fcb9ac2b071cf4227067782567ac4c02d46";
+    enum shortKeyB2s =
+        "cb4dca8c03826606aff0649e4cdfd8be4ee5c948f663bd19d335f6cd7cde5223";
+
+    BLAKE2b512 b2b;
+    assert(b2b.key(shortKey));
+    b2b.put(abc);
+    assert(b2b.finish().toHexLower() == shortKeyB2b);
+
+    BLAKE2s256 b2s;
+    assert(b2s.key(shortKey));
+    b2s.put(abc);
+    assert(b2s.finish().toHexLower() == shortKeyB2s);
+
+    BLAKE2b!(512, shortKey) ctb2b;
+    ctb2b.put(abc);
+    assert(ctb2b.finish().toHexLower() == shortKeyB2b);
+
+    BLAKE2s!(256, shortKey) ctb2s;
+    ctb2s.put(abc);
+    assert(ctb2s.finish().toHexLower() == shortKeyB2s);
 }
 
 @safe unittest
