@@ -16,3 +16,4 @@ blake2-d-test-*
 *.lst
 *.a
 *.lib
+blake2-bench
