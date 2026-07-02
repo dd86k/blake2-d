@@ -10,7 +10,7 @@ module blake2d;
 public enum BLAKE2D_VERSION_STRING = "0.4.0";
 
 private import std.digest;
-private import core.bitop : ror;
+private import core.bitop : bswap, ror;
 
 // Private status flags for enforcing behavior
 private enum
@@ -21,8 +21,10 @@ private enum
 
 // "For BLAKE2b, the two extra permutations for rounds 10 and 11 are
 // SIGMA[10..11] = SIGMA[0..1]."
-/// Sigma scheduling.
-private immutable ubyte[16][12] SIGMA = [
+/// Sigma scheduling. A manifest constant: only read at compile time (the
+/// round loop is unrolled), and it keeps GDC from emitting the array into
+/// every object that instantiates the template, which breaks linking.
+private enum ubyte[16][12] SIGMA = [
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,],
     [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3,],
     [11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4,],
@@ -37,16 +39,16 @@ private immutable ubyte[16][12] SIGMA = [
     [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3,],
 ];
 
-/// BLAKE2b IVs
-private immutable ulong[8] B2B_IV = [
+/// BLAKE2b IVs. Manifest constant, see SIGMA.
+private enum ulong[8] B2B_IV = [
     0x6a09e667f3bcc908UL, 0xbb67ae8584caa73bUL,
     0x3c6ef372fe94f82bUL, 0xa54ff53a5f1d36f1UL,
     0x510e527fade682d1UL, 0x9b05688c2b3e6c1fUL,
     0x1f83d9abfb41bd6bUL, 0x5be0cd19137e2179UL
 ];
 
-/// BLAKE2s IVs
-private immutable uint[8] B2S_IV = [
+/// BLAKE2s IVs. Manifest constant, see SIGMA.
+private enum uint[8] B2S_IV = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 ];
@@ -285,6 +287,13 @@ pure:
         f = T.max;
         compress(m.ptr);
 
+        // The digest is the little-endian serialization of h (RFC 7693 §3.3).
+        version (BigEndian)
+        {
+            foreach (ref w; h)
+                w = bswap(w);
+        }
+
         // Copy out digest, then reset the whole state. start() clears t, c,
         // m, h, f and status. This is important because the old code left
         // the finalization flag set, so a subsequent put()/finish() without
@@ -356,8 +365,6 @@ private:
 
     void compress(const(T)* m) @trusted
     {
-        // TODO: bswap message or vectors on BigEndian platforms?
-
         // The work vector lives in scalars rather than a T[16]: DMD does not
         // scalarize arrays, so an array here forces every G through memory
         // and costs about half the throughput.
@@ -372,15 +379,15 @@ private:
         {{
             enum s = SIGMA[round];
 
-            //a   b   c    d    x        y
-            G(v0, v4, v8, v12, m[s[0]], m[s[1]]);
-            G(v1, v5, v9, v13, m[s[2]], m[s[3]]);
-            G(v2, v6, v10, v14, m[s[4]], m[s[5]]);
-            G(v3, v7, v11, v15, m[s[6]], m[s[7]]);
-            G(v0, v5, v10, v15, m[s[8]], m[s[9]]);
-            G(v1, v6, v11, v12, m[s[10]], m[s[11]]);
-            G(v2, v7, v8, v13, m[s[12]], m[s[13]]);
-            G(v3, v4, v9, v14, m[s[14]], m[s[15]]);
+            //a   b   c    d    x            y
+            G(v0, v4, v8, v12, le(m[s[0]]), le(m[s[1]]));
+            G(v1, v5, v9, v13, le(m[s[2]]), le(m[s[3]]));
+            G(v2, v6, v10, v14, le(m[s[4]]), le(m[s[5]]));
+            G(v3, v7, v11, v15, le(m[s[6]]), le(m[s[7]]));
+            G(v0, v5, v10, v15, le(m[s[8]]), le(m[s[9]]));
+            G(v1, v6, v11, v12, le(m[s[10]]), le(m[s[11]]));
+            G(v2, v7, v8, v13, le(m[s[12]]), le(m[s[13]]));
+            G(v3, v4, v9, v14, le(m[s[14]]), le(m[s[15]]));
         }}
 
         h[0] ^= v0 ^ v8;
@@ -391,6 +398,16 @@ private:
         h[5] ^= v5 ^ v13;
         h[6] ^= v6 ^ v14;
         h[7] ^= v7 ^ v15;
+    }
+
+    /// Read a message word stored little-endian (RFC 7693 §2.1).
+    pragma(inline, true)
+    static T le(T x)
+    {
+        version (BigEndian)
+            return bswap(x);
+        else
+            return x;
     }
 
     pragma(inline, true)
