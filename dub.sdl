@@ -3,3 +3,12 @@ description "Pure D implementation of BLAKE2"
 authors "dd86k <dd@dax.moe>"
 copyright "Copyright © 2022, dd86k"
 license "BSL-1.0"
+
+subPackage {
+	name "bench"
+	description "Throughput benchmark"
+	targetType "executable"
+	targetName "blake2-bench"
+	sourceFiles "bench/bench.d"
+	dependency "blake2-d" path="."
+}
