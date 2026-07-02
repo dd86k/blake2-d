@@ -208,38 +208,61 @@ pure:
     {
         status |= STATUS_HASDATA;
 
-        // Process wordwise if properly aligned.
-        if ((c | cast(size_t) input.ptr) % size_t.alignof == 0)
+        // Top up a partially filled block first.
+        if (c > 0 && c < messageSize)
         {
-            foreach (const word; (cast(size_t*) input.ptr)[0 .. input.length / size_t.sizeof])
-            {
-                if (c >= messageSize)
-                {
-                    t[0] += c;
-                    if (t[0] < c)
-                        ++t[1]; // Overflow
-                    compress;
-                    c = 0;
-                }
-                mz.ptr[c / size_t.sizeof] = word;
-                c += size_t.sizeof;
-            }
-            input = input.ptr[input.length - (input.length % size_t.sizeof) .. input.length];
+            size_t n = messageSize - c;
+            if (n > input.length)
+                n = input.length;
+            m8[c .. c + n] = input[0 .. n];
+            c += n;
+            input = input[n .. $];
         }
 
-        // Process remainder bytewise.
-        foreach (const i; input)
+        if (input.length == 0)
+            return;
+
+        // A full buffered block is only compressed once more data follows,
+        // because the final block must go through finish().
+        if (c == messageSize)
         {
-            if (c >= messageSize)
-            {
-                t[0] += c;
-                if (t[0] < c)
-                    ++t[1]; // Overflow
-                compress;
-                c = 0;
-            }
-            m8[c++] = i;
+            t[0] += messageSize;
+            if (t[0] < messageSize)
+                ++t[1]; // Overflow
+            compress(m.ptr);
+            c = 0;
         }
+
+        // Compress whole blocks directly from the input, no copying.
+        // Strictly more than one block must remain so that the final block
+        // is buffered for finish(). Requires T-aligned input.
+        if (cast(size_t) input.ptr % T.alignof == 0)
+        {
+            while (input.length > messageSize)
+            {
+                t[0] += messageSize;
+                if (t[0] < messageSize)
+                    ++t[1]; // Overflow
+                compress(cast(const(T)*) input.ptr);
+                input = input[messageSize .. $];
+            }
+        }
+        else // Unaligned: copy blocks through the buffer.
+        {
+            while (input.length > messageSize)
+            {
+                t[0] += messageSize;
+                if (t[0] < messageSize)
+                    ++t[1]; // Overflow
+                m8[0 .. messageSize] = input[0 .. messageSize];
+                compress(m.ptr);
+                input = input[messageSize .. $];
+            }
+        }
+
+        // Buffer the remainder, which may be exactly one full block.
+        m8[c .. c + input.length] = input[0 .. $];
+        c += input.length;
     }
 
     /// Returns the finished hash.
@@ -259,13 +282,13 @@ pure:
 
         // Zero-pad message buffer
         m8[c .. $] = 0;
-        v14 = ~iv[6];
-        compress;
+        f = T.max;
+        compress(m.ptr);
 
         // Copy out digest, then reset the whole state. start() clears t, c,
-        // mz, h, v14 and status. This is important because the old code left
-        // v14 = ~iv[6] behind, so a subsequent put()/finish() without an
-        // explicit start() produced a garbage hash.
+        // m, h, f and status. This is important because the old code left
+        // the finalization flag set, so a subsequent put()/finish() without
+        // an explicit start() produced a garbage hash.
         ubyte[digestSizeBytes] result = h8[0 .. digestSizeBytes];
         start();
         return result;
@@ -297,16 +320,14 @@ private:
         {
             ubyte[16 * T.sizeof] m8 = initKeyBlock; /// Message (m) as ubyte
             T[16] m; /// Message (m)
-            size_t[messageSize / size_t.sizeof] mz; /// Message (m) as size_t
         }
     }
     else
     {
         union  // input message buffer
         {
-            size_t[messageSize / size_t.sizeof] mz = void; /// Message (m) as size_t
+            ubyte[16 * T.sizeof] m8 = void; /// Message (m) as ubyte
             T[16] m; /// Message (m)
-            ubyte[16 * T.sizeof] m8; /// Message (m) as ubyte
         }
     }
 
@@ -327,74 +348,62 @@ private:
     /// starts at messageSize — the next put() will compress the key block
     /// before accepting any new data.
     size_t c = initKey.length > 0 ? messageSize : 0;
-    T v14 = iv[6]; /// Vector 14. On last block, this turns from IV6 to ~IV6.
+    /// Finalization flag (f0 in RFC 7693). Zero while data is being fed;
+    /// finish() sets all bits so that v[14] = IV6 ^ f0 marks the last block.
+    T f;
 
     int status; /// Internal status flags.
 
-    void compress() @trusted
+    void compress(const(T)* m) @trusted
     {
         // TODO: bswap message or vectors on BigEndian platforms?
 
-        T[16] v = [
-            h[0],
-            h[1],
-            h[2],
-            h[3],
-            h[4],
-            h[5],
-            h[6],
-            h[7],
-            iv[0],
-            iv[1],
-            iv[2],
-            iv[3],
-            t[0] ^ iv[4],
-            t[1] ^ iv[5],
-            v14,
-            iv[7],
-        ];
+        // The work vector lives in scalars rather than a T[16]: DMD does not
+        // scalarize arrays, so an array here forces every G through memory
+        // and costs about half the throughput.
+        T v0 = h[0], v1 = h[1], v2 = h[2], v3 = h[3];
+        T v4 = h[4], v5 = h[5], v6 = h[6], v7 = h[7];
+        T v8 = iv[0], v9 = iv[1], v10 = iv[2], v11 = iv[3];
+        T v12 = t[0] ^ iv[4], v13 = t[1] ^ iv[5], v14 = f ^ iv[6], v15 = iv[7];
 
-        // Assert i=0 v[16]
+        // Unrolled so the sigma indices are compile-time constants,
+        // making each message word a direct load.
+        static foreach (round; 0 .. ROUNDS)
+        {{
+            enum s = SIGMA[round];
 
-        for (size_t round; round < ROUNDS; ++round)
-        {
-            immutable(ubyte)* sigma = SIGMA[round].ptr;
+            //a   b   c    d    x        y
+            G(v0, v4, v8, v12, m[s[0]], m[s[1]]);
+            G(v1, v5, v9, v13, m[s[2]], m[s[3]]);
+            G(v2, v6, v10, v14, m[s[4]], m[s[5]]);
+            G(v3, v7, v11, v15, m[s[6]], m[s[7]]);
+            G(v0, v5, v10, v15, m[s[8]], m[s[9]]);
+            G(v1, v6, v11, v12, m[s[10]], m[s[11]]);
+            G(v2, v7, v8, v13, m[s[12]], m[s[13]]);
+            G(v3, v4, v9, v14, m[s[14]], m[s[15]]);
+        }}
 
-            //   a  b   c   d  x             y
-            G(v, 0, 4, 8, 12, m[sigma[0]], m[sigma[1]]);
-            G(v, 1, 5, 9, 13, m[sigma[2]], m[sigma[3]]);
-            G(v, 2, 6, 10, 14, m[sigma[4]], m[sigma[5]]);
-            G(v, 3, 7, 11, 15, m[sigma[6]], m[sigma[7]]);
-            G(v, 0, 5, 10, 15, m[sigma[8]], m[sigma[9]]);
-            G(v, 1, 6, 11, 12, m[sigma[10]], m[sigma[11]]);
-            G(v, 2, 7, 8, 13, m[sigma[12]], m[sigma[13]]);
-            G(v, 3, 4, 9, 14, m[sigma[14]], m[sigma[15]]);
-
-            // Assert i=1..i=10/12 v[16]
-        }
-
-        h[0] ^= v[0] ^ v[8];
-        h[1] ^= v[1] ^ v[9];
-        h[2] ^= v[2] ^ v[10];
-        h[3] ^= v[3] ^ v[11];
-        h[4] ^= v[4] ^ v[12];
-        h[5] ^= v[5] ^ v[13];
-        h[6] ^= v[6] ^ v[14];
-        h[7] ^= v[7] ^ v[15];
-
-        // Assert h[8]
+        h[0] ^= v0 ^ v8;
+        h[1] ^= v1 ^ v9;
+        h[2] ^= v2 ^ v10;
+        h[3] ^= v3 ^ v11;
+        h[4] ^= v4 ^ v12;
+        h[5] ^= v5 ^ v13;
+        h[6] ^= v6 ^ v14;
+        h[7] ^= v7 ^ v15;
     }
 
-    static void G(ref T[16] v, uint a, uint b, uint c, uint d, T x, T y)
+    pragma(inline, true)
+    static void G(ref T a, ref T b, ref T c, ref T d, T x, T y)
     {
-        v[a] = v[a] + v[b] + x;
-        v[d] = ror(v[d] ^ v[a], R1);
-        v[c] = v[c] + v[d];
-        v[b] = ror(v[b] ^ v[c], R2);
-        v[a] = v[a] + v[b] + y;
-        v[d] = ror(v[d] ^ v[a], R3);
-        v[c] = v[c] + v[d];
-        v[b] = ror(v[b] ^ v[c], R4);
+        a = a + b + x;
+        d = ror(d ^ a, R1);
+        c = c + d;
+        b = ror(b ^ c, R2);
+        a = a + b + y;
+        d = ror(d ^ a, R3);
+        c = c + d;
+        b = ror(b ^ c, R4);
     }
 }
 
